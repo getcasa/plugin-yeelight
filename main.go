@@ -7,24 +7,20 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/getcasa/sdk"
 )
 
-func main() {
-	OnStart()
-
-	for len(lights) == 0 {
-	}
-}
+func main() {}
 
 const (
 	discoverMSG = "M-SEARCH * HTTP/1.1\r\n HOST:239.255.255.250:1982\r\n MAN:\"ssdp:discover\"\r\n ST:wifi_bulb\r\n"
 
 	// timeout value for TCP and UDP commands
-	timeout = time.Second * 10
+	timeout = time.Second * 3
 
 	//SSDP discover address
 	ssdpAddr = "239.255.255.250:1982"
@@ -33,6 +29,7 @@ const (
 	crlf = "\r\n"
 )
 
+// Config define parameters for plugin
 var Config = sdk.Configuration{
 	Name:        "yeelight",
 	Version:     "1.0.0",
@@ -43,12 +40,19 @@ var Config = sdk.Configuration{
 	Actions: []sdk.Action{
 		sdk.Action{
 			Name:   "setpower",
-			Fields: []string{"Light", "status"},
+			Fields: []string{"address", "status"},
+		},
+		sdk.Action{
+			Name:   "toggle",
+			Fields: []string{"address"},
 		},
 	},
 }
 
-var lights []*Yeelight
+var (
+	discover bool
+	lights   []*Yeelight
+)
 
 type (
 	//Command represents COMMAND request to Yeelight device
@@ -79,19 +83,30 @@ type (
 
 	//Yeelight represents device
 	Yeelight struct {
-		addr string
-		rnd  *rand.Rand
+		ID        string
+		Model     string
+		Power     string
+		Bright    int
+		ColorMode int
+		CT        int
+		RGB       int
+		Hue       int
+		Sat       int
+		Name      string
+		Addr      string
+		rnd       *rand.Rand
 	}
 )
 
 // Params define actions parameters available
 type Params struct {
-	Light  *Yeelight
-	Status bool
+	Address string
+	Status  bool
 }
 
 // OnStart start UDP server to get Xiaomi data
 func OnStart() {
+	discover = true
 	go Discover()
 
 	return
@@ -118,12 +133,26 @@ func CallAction(name string, params []byte) {
 		fmt.Println(err)
 	}
 
+	yee := findLightWithAddr(req.Address)
+	if yee == nil {
+		return
+	}
+	fmt.Println("XXXXXXXX")
+	fmt.Println(yee.Addr)
+	fmt.Println("XXXXXXXX")
+
 	// use name to call actions
 	switch name {
 	case "setpower":
-		req.Light.SetPower(req.Status)
-	case "post":
-		// Post(req.Link, req.CtnType, req.Values)
+		yee.SetPower(req.Status)
+	case "stripe":
+		if yee.Power == "on" {
+			yee.SetPower(false)
+			yee.Power = "off"
+		} else {
+			yee.SetPower(true)
+			yee.Power = "on"
+		}
 	default:
 		return
 	}
@@ -131,13 +160,15 @@ func CallAction(name string, params []byte) {
 
 // OnStop close connection
 func OnStop() {
+	lights = nil
+	discover = false
 }
 
 //Discover discovers device in local network via ssdp
 func Discover() {
 	var addr string
 
-	for true {
+	for discover {
 		ssdp, _ := net.ResolveUDPAddr("udp4", ssdpAddr)
 		c, _ := net.ListenPacket("udp4", ":0")
 		socket := c.(*net.UDPConn)
@@ -146,16 +177,18 @@ func Discover() {
 		rsBuf := make([]byte, 1024)
 		size, _, err := socket.ReadFromUDP(rsBuf)
 		if err != nil {
-			fmt.Println("no devices found")
+			// fmt.Println("no devices found")
 		} else {
 			rs := rsBuf[0:size]
-			fmt.Println(size)
-			fmt.Println(string(rs))
 			addr = parseAddr(string(rs))
-			fmt.Printf("Device with ip %s found\n", addr)
-			if !checkAddrInLights(addr) {
-				arrayLight := append(lights, New(addr))
-				lights = arrayLight
+			// fmt.Printf("Device with ip %s found\n", addr)
+			if findLightWithAddr(addr) == nil {
+				newyee := New(addr, string(rs))
+				if newyee != nil {
+					lights = append(lights, newyee)
+					newyee.Listen()
+					fmt.Println(newyee)
+				}
 			}
 		}
 	}
@@ -163,20 +196,71 @@ func Discover() {
 	return
 }
 
-func checkAddrInLights(addr string) bool {
+func findLightWithAddr(addr string) *Yeelight {
+	if len(lights) == 0 {
+		return nil
+	}
 	for _, light := range lights {
-		if light.addr == addr {
-			return true
+		if light.Addr == addr || light.ID == addr {
+			return light
 		}
 	}
-	return false
+	return nil
 }
 
 //New creates new device instance for address provided
-func New(addr string) *Yeelight {
+func New(addr string, info string) *Yeelight {
+	if strings.HasSuffix(info, crlf) {
+		info = info + crlf
+	}
+	resp, err := http.ReadResponse(bufio.NewReader(strings.NewReader(info)), nil)
+	if err != nil {
+		fmt.Println(err)
+		return nil
+	}
+	bright, err := strconv.Atoi(resp.Header.Get("BRIGHT"))
+	if err != nil {
+		fmt.Println(err)
+		return nil
+	}
+	ct, err := strconv.Atoi(resp.Header.Get("CT"))
+	if err != nil {
+		fmt.Println(err)
+		return nil
+	}
+	colormode, err := strconv.Atoi(resp.Header.Get("COLOR_MODE"))
+	if err != nil {
+		fmt.Println(err)
+		return nil
+	}
+	rgb, err := strconv.Atoi(resp.Header.Get("RGB"))
+	if err != nil {
+		fmt.Println(err)
+		return nil
+	}
+	hue, err := strconv.Atoi(resp.Header.Get("HUE"))
+	if err != nil {
+		fmt.Println(err)
+		return nil
+	}
+	sat, err := strconv.Atoi(resp.Header.Get("SAT"))
+	if err != nil {
+		fmt.Println(err)
+		return nil
+	}
 	return &Yeelight{
-		addr: addr,
-		rnd:  rand.New(rand.NewSource(time.Now().UnixNano())),
+		ID:        resp.Header.Get("ID"),
+		Model:     resp.Header.Get("MODEL"),
+		Power:     resp.Header.Get("POWER"),
+		Bright:    bright,
+		ColorMode: colormode,
+		CT:        ct,
+		RGB:       rgb,
+		Hue:       hue,
+		Sat:       sat,
+		Name:      resp.Header.Get("NAME"),
+		Addr:      addr,
+		rnd:       rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 
 }
@@ -187,9 +271,6 @@ func parseAddr(msg string) string {
 		msg = msg + crlf
 	}
 	resp, err := http.ReadResponse(bufio.NewReader(strings.NewReader(msg)), nil)
-	fmt.Println("-----")
-	fmt.Println(resp.Header.Get("ID"))
-	fmt.Println("-----")
 	if err != nil {
 		fmt.Println(err)
 		return ""
@@ -235,9 +316,9 @@ func (y *Yeelight) executeCommand(name string, params ...interface{}) (*CommandR
 //executeCommand executes command
 func (y *Yeelight) execute(cmd *Command) (*CommandResult, error) {
 
-	conn, err := net.Dial("tcp", y.addr)
+	conn, err := net.Dial("tcp", y.Addr)
 	if nil != err {
-		return nil, fmt.Errorf("cannot open connection to %s. %s", y.addr, err)
+		return nil, fmt.Errorf("cannot open connection to %s. %s", y.Addr, err)
 	}
 	time.Sleep(time.Second)
 	conn.SetReadDeadline(time.Now().Add(timeout))
@@ -273,9 +354,9 @@ func (y *Yeelight) Listen() (<-chan *Notification, chan<- struct{}, error) {
 	notifCh := make(chan *Notification)
 	done := make(chan struct{}, 1)
 
-	conn, err := net.DialTimeout("tcp", y.addr, time.Second*3)
+	conn, err := net.DialTimeout("tcp", y.Addr, time.Second*3)
 	if err != nil {
-		return nil, nil, fmt.Errorf("cannot connect to %s. %s", y.addr, err)
+		return nil, nil, fmt.Errorf("cannot connect to %s. %s", y.Addr, err)
 	}
 
 	fmt.Println("Connection established")
