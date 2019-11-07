@@ -17,17 +17,6 @@ import (
 )
 
 func main() {
-	OnStart(nil)
-	for range time.Tick(5 * time.Second) {
-		for _, li := range lights {
-			fmt.Println(li.ID)
-			li.Toggle()
-			// fmt.Println(li.Name)
-			// fmt.Println(li.Model)
-			// fmt.Println(li.Power)
-			// fmt.Println("--")
-		}
-	}
 }
 
 const (
@@ -57,11 +46,6 @@ var Config = sdk.Configuration{
 			Name: "setpower",
 			Fields: []sdk.Field{
 				sdk.Field{
-					Name:   "address",
-					Type:   "string",
-					Config: true,
-				},
-				sdk.Field{
 					Name:   "state",
 					Type:   "string",
 					Config: true,
@@ -69,14 +53,8 @@ var Config = sdk.Configuration{
 			},
 		},
 		sdk.Action{
-			Name: "toggle",
-			Fields: []sdk.Field{
-				sdk.Field{
-					Name:   "address",
-					Type:   "string",
-					Config: true,
-				},
-			},
+			Name:   "toggle",
+			Fields: []sdk.Field{},
 		},
 	},
 }
@@ -100,13 +78,7 @@ type (
 		Error  *Error        `json:"error,omitempty"`
 	}
 
-	// Notification represents notification response
-	Notification struct {
-		Method string            `json:"method"`
-		Params map[string]string `json:"params"`
-	}
-
-	//Error struct represents error part of response
+	// Error struct represents error part of response
 	Error struct {
 		Code    int    `json:"code"`
 		Message string `json:"message"`
@@ -137,11 +109,10 @@ type (
 
 // Params define actions parameters available
 type Params struct {
-	Address string
-	State   bool
+	State bool
 }
 
-// Init
+// Init intialise plugin
 func Init() []byte {
 	return []byte{}
 }
@@ -159,7 +130,7 @@ func OnData() interface{} {
 }
 
 // CallAction call functions from actions
-func CallAction(name string, params []byte, config []byte) {
+func CallAction(physicalID string, name string, params []byte, config []byte) {
 	if string(params) == "" {
 		fmt.Println("Params must be provided")
 		return
@@ -174,7 +145,7 @@ func CallAction(name string, params []byte, config []byte) {
 		fmt.Println(err)
 	}
 
-	yee := findLightWithAddr(req.Address)
+	yee := findLightWithAddr(physicalID)
 	if yee == nil {
 		return
 	}
@@ -189,8 +160,8 @@ func CallAction(name string, params []byte, config []byte) {
 	case "toggle":
 		yee.Toggle()
 	default:
-		return
 	}
+	yee.Update()
 }
 
 // OnStop close connection
@@ -216,76 +187,92 @@ var wg sync.WaitGroup
 func Discover() []sdk.Device {
 	var devices []sdk.Device
 
-	for range time.Tick(timeout) {
-		discover()
+	err := discover()
+	if err != nil {
+		return Discover()
 	}
-	// for _, light := range lights {
-	// 	device := sdk.Device{
+	for _, light := range lights {
+		if light.ID == "" {
+			continue
+		}
 
-	// 	}
-	// }
+		devices = append(devices, sdk.Device{
+			Name:         light.Name,
+			PhysicalID:   light.ID,
+			PhysicalName: light.Model,
+			Plugin:       Config.Name,
+		})
+	}
 
 	return devices
 }
 
 //discover discovers device in local network via ssdp
-func discover() {
+func discover() error {
 	var ipAddresses []string
 	ifaces, err := net.Interfaces()
-	if err == nil {
+	if err != nil {
+		return err
+	}
 
-		for _, iface := range ifaces {
-			addrs, err := iface.Addrs()
-			if err == nil {
-				for _, addr := range addrs {
-					cleanAddr := addr.String()[:strings.Index(addr.String(), "/")]
-					if cleanAddr != "127.0.0.1" && !strings.Contains(cleanAddr, ":") && !net.ParseIP(cleanAddr).IsLoopback() {
-						cleanAddr = addr.String()[:strings.LastIndex(addr.String(), ".")+1]
-						if !containIPAddress(ipAddresses, cleanAddr) {
-							ipAddresses = append(ipAddresses, cleanAddr)
-						}
-					}
+	for _, iface := range ifaces {
+		addrs, err := iface.Addrs()
+		if err != nil {
+			return err
+		}
+		for _, addr := range addrs {
+			cleanAddr := addr.String()[:strings.Index(addr.String(), "/")]
+			if cleanAddr == "127.0.0.1" || strings.Contains(cleanAddr, ":") || net.ParseIP(cleanAddr).IsLoopback() {
+				continue
+			}
+			cleanAddr = addr.String()[:strings.LastIndex(addr.String(), ".")+1]
+			if containIPAddress(ipAddresses, cleanAddr) {
+				continue
+			}
+			ipAddresses = append(ipAddresses, cleanAddr)
+		}
+	}
+
+	wg.Add(len(ipAddresses) * 255)
+
+	for _, ipAddr := range ipAddresses {
+		for i := 0; i < 255; i++ {
+			go func(i int, ipAddr string) {
+				ip := ipAddr + strconv.Itoa(i)
+				if findLightWithAddr(ip+":"+strconv.Itoa(yeelightPort)) != nil {
+					wg.Done()
+					return
+				}
+				ps := portscanner.NewPortScanner(ip, 5*time.Second, 4)
+				opened := ps.IsOpen(yeelightPort)
+				if !opened {
+					wg.Done()
+					return
+				}
+				newyee := New(ip + ":" + strconv.Itoa(yeelightPort))
+				newyee.connect()
+				if newyee == nil || !newyee.Connected {
+					wg.Done()
+					return
+				}
+				lights = append(lights, newyee)
+				wg.Done()
+			}(i, ipAddr)
+
+		}
+	}
+	wg.Wait()
+
+	go func() {
+		check := true
+		for check {
+			check = false
+			for _, light := range lights {
+				if light.ID == "" {
+					check = true
+					break
 				}
 			}
-		}
-
-		wg.Add(len(ipAddresses) * 255)
-
-		for _, ipAddr := range ipAddresses {
-			for i := 0; i < 255; i++ {
-				go func(i int, ipAddr string) {
-					ip := ipAddr + strconv.Itoa(i)
-					if findLightWithAddr(ip+":"+strconv.Itoa(yeelightPort)) == nil {
-						ps := portscanner.NewPortScanner(ip, 4*time.Second, 4)
-						opened := ps.IsOpen(55443)
-						if opened {
-							newyee := New(ip + ":" + strconv.Itoa(yeelightPort))
-							if newyee != nil {
-								newyee.connect()
-								if newyee.Connected {
-									lights = append(lights, newyee)
-								}
-							}
-						}
-					}
-					wg.Done()
-				}(i, ipAddr)
-
-			}
-		}
-		wg.Wait()
-	}
-
-	check := false
-	for _, li := range lights {
-		if li.ID == "" {
-			check = true
-			break
-		}
-	}
-
-	if check {
-		for check {
 			ssdp, _ := net.ResolveUDPAddr("udp4", ssdpAddr)
 			c, _ := net.ListenPacket("udp4", ":0")
 			socket := c.(*net.UDPConn)
@@ -296,16 +283,19 @@ func discover() {
 			size, _, err := socket.ReadFromUDP(rsBuf)
 			if err != nil {
 				fmt.Println(err)
+				continue
 			}
 			rs := rsBuf[0:size]
+
 			addr := parseAddr(string(rs))
-			id := parseID(string(rs))
 			light := findLightWithAddr(addr)
 			if light != nil && light.ID == "" {
-				findLightWithAddr(addr).ID = id
+				findLightWithAddr(addr).ID = parseID(string(rs))
 			}
 		}
-	}
+	}()
+
+	return nil
 }
 
 func (y *Yeelight) stayActive() {
@@ -316,8 +306,6 @@ func (y *Yeelight) stayActive() {
 
 func (y *Yeelight) connect() {
 	var err error
-	// notifCh := make(chan *Notification)
-	// done := make(chan struct{}, 1)
 	if y.Socket != nil {
 		y.disconnect()
 	}
@@ -336,7 +324,7 @@ func (y *Yeelight) connect() {
 		return
 	}
 
-	info, err := y.GetProp("model", "name", "id")
+	info, err := y.GetProp("model", "name")
 	if err == nil {
 		if len(info) >= 1 {
 			y.Model = info[0].(string)
@@ -347,33 +335,6 @@ func (y *Yeelight) connect() {
 	}
 
 	go y.stayActive()
-
-	// go func(c net.Conn) {
-	// 	//make sure connection is closed when method returns
-	// 	defer y.disconnect()
-
-	// 	connReader := bufio.NewReader(c)
-	// 	for {
-	// 		select {
-	// 		case <-done:
-	// 			return
-	// 		default:
-	// 			data, err := connReader.ReadString('\n')
-	// 			if nil == err {
-	// 				var rs Notification
-	// 				fmt.Println(data)
-	// 				json.Unmarshal([]byte(data), &rs)
-	// 				select {
-	// 				case notifCh <- &rs:
-	// 				default:
-	// 					fmt.Println("Channel is full")
-	// 				}
-	// 			}
-	// 		}
-
-	// 	}
-
-	// }(y.Socket)
 }
 
 func (y *Yeelight) disconnect() {
@@ -414,43 +375,44 @@ func (y *Yeelight) Update() bool {
 	}
 
 	on, err := y.GetProp("power", "color_mode", "ct", "rgb", "hue", "sat", "bright", "flowing", "delayoff", "flow_params", "music_on")
-	if err == nil {
-		if len(on) >= 1 {
-			y.Power = on[0].(string)
-		}
-		if len(on) >= 2 {
-			y.ColorMode, _ = strconv.Atoi(on[1].(string))
-		}
-		if len(on) >= 3 {
-			y.CT, _ = strconv.Atoi(on[2].(string))
-		}
-		if len(on) >= 4 {
-			y.RGB, _ = strconv.Atoi(on[3].(string))
-		}
-		if len(on) >= 5 {
-			y.Hue, _ = strconv.Atoi(on[4].(string))
-		}
-		if len(on) >= 6 {
-			y.Sat, _ = strconv.Atoi(on[5].(string))
-		}
-		if len(on) >= 7 {
-			y.Bright, _ = strconv.Atoi(on[6].(string))
-		}
-		if len(on) >= 8 {
-			y.Flowing, _ = strconv.Atoi(on[7].(string))
-		}
-		if len(on) >= 9 {
-			y.DelayOff, _ = strconv.Atoi(on[8].(string))
-		}
-		if len(on) >= 10 {
-			y.FlowParams, _ = strconv.Atoi(on[9].(string))
-		}
-		if len(on) >= 11 {
-			y.MusicOn, _ = strconv.Atoi(on[10].(string))
-		}
-		return true
+	if err != nil {
+		return false
 	}
-	return false
+
+	if len(on) >= 1 {
+		y.Power = on[0].(string)
+	}
+	if len(on) >= 2 {
+		y.ColorMode, _ = strconv.Atoi(on[1].(string))
+	}
+	if len(on) >= 3 {
+		y.CT, _ = strconv.Atoi(on[2].(string))
+	}
+	if len(on) >= 4 {
+		y.RGB, _ = strconv.Atoi(on[3].(string))
+	}
+	if len(on) >= 5 {
+		y.Hue, _ = strconv.Atoi(on[4].(string))
+	}
+	if len(on) >= 6 {
+		y.Sat, _ = strconv.Atoi(on[5].(string))
+	}
+	if len(on) >= 7 {
+		y.Bright, _ = strconv.Atoi(on[6].(string))
+	}
+	if len(on) >= 8 {
+		y.Flowing, _ = strconv.Atoi(on[7].(string))
+	}
+	if len(on) >= 9 {
+		y.DelayOff, _ = strconv.Atoi(on[8].(string))
+	}
+	if len(on) >= 10 {
+		y.FlowParams, _ = strconv.Atoi(on[9].(string))
+	}
+	if len(on) >= 11 {
+		y.MusicOn, _ = strconv.Atoi(on[10].(string))
+	}
+	return true
 }
 
 //SetPower is used to switch on or off the smart LED (software managed on/off).
@@ -468,7 +430,62 @@ func (y *Yeelight) SetPower(on bool) error {
 //Toggle is used to switch on or off the smart LED (software managed on/off).
 func (y *Yeelight) Toggle() error {
 	_, err := y.executeCommand("toggle")
+
 	return err
+}
+
+// GetProp method is used to retrieve current property of smart LED.
+func (y *Yeelight) GetProp(values ...interface{}) ([]interface{}, error) {
+	r, err := y.executeCommand("get_prop", values...)
+	if nil != err {
+		return nil, err
+	}
+	return r.Result, nil
+}
+
+//executeCommand executes command with provided parameters
+func (y *Yeelight) executeCommand(name string, params ...interface{}) (*CommandResult, error) {
+	return y.execute(&Command{
+		Method: name,
+		ID:     y.randID(),
+		Params: params,
+	})
+}
+
+//executeCommand executes command
+func (y *Yeelight) execute(cmd *Command) (*CommandResult, error) {
+
+	if !y.Connected || y.Socket == nil {
+		y.connect()
+		if y.Socket == nil {
+			return nil, nil
+		}
+	}
+
+	y.Socket.SetReadDeadline(time.Now().Add(timeout))
+
+	b, _ := json.Marshal(cmd)
+	fmt.Fprint(y.Socket, string(b)+crlf)
+
+	reply := make([]byte, 1024)
+	size, err := y.Socket.Read(reply)
+	if err != nil {
+		return nil, fmt.Errorf("cannot read command result %s", err)
+	}
+
+	reply = reply[:size]
+
+	var rs CommandResult
+	err = json.Unmarshal(reply, &rs)
+	if nil != err {
+		return nil, fmt.Errorf("cannot parse command result %s", err)
+	}
+	if nil != rs.Error {
+		return nil, fmt.Errorf("command execution error. Code: %d, Message: %s", rs.Error.Code, rs.Error.Message)
+	}
+
+	return &rs, nil
+
 }
 
 //parseAddr parses address from ssdp response
@@ -497,68 +514,6 @@ func parseID(msg string) string {
 	}
 	defer resp.Body.Close()
 	return resp.Header.Get("ID")
-}
-
-// GetProp method is used to retrieve current property of smart LED.
-func (y *Yeelight) GetProp(values ...interface{}) ([]interface{}, error) {
-	r, err := y.executeCommand("get_prop", values...)
-	if nil != err {
-		return nil, err
-	}
-	return r.Result, nil
-}
-
-func (y *Yeelight) newCommand(name string, params []interface{}) *Command {
-	return &Command{
-		Method: name,
-		ID:     y.randID(),
-		Params: params,
-	}
-}
-
-//executeCommand executes command with provided parameters
-func (y *Yeelight) executeCommand(name string, params ...interface{}) (*CommandResult, error) {
-	return y.execute(y.newCommand(name, params))
-}
-
-//executeCommand executes command
-func (y *Yeelight) execute(cmd *Command) (*CommandResult, error) {
-
-	if !y.Connected || y.Socket == nil {
-		y.connect()
-		if y.Socket == nil {
-			return nil, nil
-		}
-	}
-
-	y.Socket.SetReadDeadline(time.Now().Add(timeout))
-
-	//write request/command
-	b, _ := json.Marshal(cmd)
-	fmt.Fprint(y.Socket, string(b)+crlf)
-
-	//wait and read for response
-	// res, err := bufio.NewReader(y.Socket).ReadString('\n')
-	reply := make([]byte, 1024)
-	size, err := y.Socket.Read(reply)
-	if err != nil {
-		return nil, fmt.Errorf("cannot read command result %s", err)
-	}
-
-	reply = reply[:size]
-
-	var rs CommandResult
-	err = json.Unmarshal(reply, &rs)
-	if nil != err {
-		return nil, fmt.Errorf("cannot parse command result %s", err)
-	}
-	if nil != rs.Error {
-		return nil, fmt.Errorf("command execution error. Code: %d, Message: %s", rs.Error.Code, rs.Error.Message)
-	}
-
-	fmt.Println(rs.Result)
-	return &rs, nil
-
 }
 
 func (y *Yeelight) randID() int {
