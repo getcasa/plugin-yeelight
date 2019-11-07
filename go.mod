@@ -1,11 +1,11 @@
-module github.com/getcasa/plugin-xiaomi
+module github.com/getcasa/plugin-yeelight
 
 go 1.12
 
 require (
 	github.com/anvie/port-scanner v0.0.0-20180225151059-8159197d3770
 	github.com/bcurren/go-ssdp v0.0.0-20130927201504-ae8e7a0ef8a8
-	github.com/getcasa/sdk v0.0.0-20190923145410-20bbee062dc8
+	github.com/getcasa/sdk v0.0.0-20191105095754-6df142bc28a9
 	github.com/konsorten/go-windows-terminal-sequences v1.0.2 // indirect
 	github.com/koron/go-ssdp v0.0.0-20191105050749-2e1c40ed0b5d
 	github.com/labstack/gommon v0.3.0
@@ -18,4 +18,4 @@ require (
 	golang.org/x/sys v0.0.0-20190924154521-2837fb4f24fe // indirect
 )
 
-replace github.com/getcasa/sdk v0.0.0-20190923145410-20bbee062dc8 => ../casa-sdk
+replace github.com/getcasa/sdk v0.0.0-20191105095754-6df142bc28a9 => ../casa-sdk
