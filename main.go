@@ -38,9 +38,7 @@ var Config = sdk.Configuration{
 	Name:        "yeelight",
 	Version:     "1.0.0",
 	Author:      "amoinier",
-	Description: "yeelight",
-	Main:        "yeelight",
-	FuncData:    "onData",
+	Description: "Controls yeelight ecosystem",
 	Actions: []sdk.Action{
 		sdk.Action{
 			Name: "setpower",
@@ -112,14 +110,15 @@ type Params struct {
 	State bool
 }
 
-// Init intialise plugin
-func Init() []byte {
-	return []byte{}
-}
-
 // OnStart start UDP server to get Xiaomi data
 func OnStart(config []byte) {
 	go Discover()
+
+	go func() {
+		for range time.Tick(5 * time.Second) {
+			findIDLight()
+		}
+	}()
 
 	return
 }
@@ -140,18 +139,12 @@ func CallAction(physicalID string, name string, params []byte, config []byte) {
 	var req Params
 
 	// unmarshal parameters to use in actions
-	err := json.Unmarshal(params, &req)
-	if err != nil {
-		fmt.Println(err)
-	}
+	json.Unmarshal(params, &req)
 
 	yee := findLightWithAddr(physicalID)
 	if yee == nil {
 		return
 	}
-	fmt.Println("XXXXXXXX")
-	fmt.Println(yee.Addr)
-	fmt.Println("XXXXXXXX")
 
 	// use name to call actions
 	switch name {
@@ -188,7 +181,9 @@ func Discover() []sdk.Device {
 	var devices []sdk.Device
 
 	err := discover()
+	go findIDLight()
 	if err != nil {
+		fmt.Println(err)
 		return Discover()
 	}
 	for _, light := range lights {
@@ -243,7 +238,7 @@ func discover() error {
 					wg.Done()
 					return
 				}
-				ps := portscanner.NewPortScanner(ip, 5*time.Second, 4)
+				ps := portscanner.NewPortScanner(ip, 10*time.Second, 4)
 				opened := ps.IsOpen(yeelightPort)
 				if !opened {
 					wg.Done()
@@ -263,39 +258,41 @@ func discover() error {
 	}
 	wg.Wait()
 
-	go func() {
-		check := true
-		for check {
-			check = false
-			for _, light := range lights {
-				if light.ID == "" {
-					check = true
-					break
-				}
-			}
-			ssdp, _ := net.ResolveUDPAddr("udp4", ssdpAddr)
-			c, _ := net.ListenPacket("udp4", ":0")
-			socket := c.(*net.UDPConn)
-			socket.WriteToUDP([]byte(discoverMSG), ssdp)
-			socket.SetReadDeadline(time.Now().Add(timeout))
+	return nil
+}
 
-			rsBuf := make([]byte, 1024)
-			size, _, err := socket.ReadFromUDP(rsBuf)
-			if err != nil {
-				fmt.Println(err)
-				continue
-			}
-			rs := rsBuf[0:size]
-
-			addr := parseAddr(string(rs))
-			light := findLightWithAddr(addr)
-			if light != nil && light.ID == "" {
-				findLightWithAddr(addr).ID = parseID(string(rs))
+func findIDLight() {
+	var check bool
+	check = true
+	for check {
+		check = false
+		for _, light := range lights {
+			if light.ID == "" {
+				check = true
+				break
 			}
 		}
-	}()
+		ssdp, _ := net.ResolveUDPAddr("udp4", ssdpAddr)
+		c, _ := net.ListenPacket("udp4", ":0")
+		socket := c.(*net.UDPConn)
+		socket.WriteToUDP([]byte(discoverMSG), ssdp)
+		socket.SetReadDeadline(time.Now().Add(timeout))
 
-	return nil
+		rsBuf := make([]byte, 1024)
+		size, _, err := socket.ReadFromUDP(rsBuf)
+		if err != nil {
+			fmt.Println(err)
+			continue
+		}
+		rs := rsBuf[0:size]
+
+		addr := parseAddr(string(rs))
+		light := findLightWithAddr(addr)
+		if light != nil && light.ID == "" {
+			findLightWithAddr(addr).ID = parseID(string(rs))
+			fmt.Println(addr + " - " + parseID(string(rs)))
+		}
+	}
 }
 
 func (y *Yeelight) stayActive() {
@@ -334,7 +331,7 @@ func (y *Yeelight) connect() {
 		}
 	}
 
-	go y.stayActive()
+	// go y.stayActive()
 }
 
 func (y *Yeelight) disconnect() {
