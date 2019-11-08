@@ -123,11 +123,6 @@ func OnStart(config []byte) {
 	return
 }
 
-// OnData get data from xiaomi gateway
-func OnData() interface{} {
-	return nil
-}
-
 // CallAction call functions from actions
 func CallAction(physicalID string, name string, params []byte, config []byte) {
 	if string(params) == "" {
