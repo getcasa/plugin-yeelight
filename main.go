@@ -175,12 +175,11 @@ var wg sync.WaitGroup
 func Discover() []sdk.Device {
 	var devices []sdk.Device
 
-	err := discover()
-	go findIDLight()
-	if err != nil {
-		fmt.Println(err)
-		return Discover()
-	}
+	go func() {
+		discover()
+		findIDLight()
+	}()
+
 	for _, light := range lights {
 		if light.ID == "" {
 			continue
@@ -257,9 +256,9 @@ func discover() error {
 }
 
 func findIDLight() {
-	var check bool
-	check = true
+	check := true
 	for check {
+		time.Sleep(250 * time.Millisecond)
 		check = false
 		for _, light := range lights {
 			if light.ID == "" {
@@ -268,7 +267,10 @@ func findIDLight() {
 			}
 		}
 		ssdp, _ := net.ResolveUDPAddr("udp4", ssdpAddr)
-		c, _ := net.ListenPacket("udp4", ":0")
+		c, err := net.ListenPacket("udp4", ":0")
+		if err != nil {
+			continue
+		}
 		socket := c.(*net.UDPConn)
 		socket.WriteToUDP([]byte(discoverMSG), ssdp)
 		socket.SetReadDeadline(time.Now().Add(timeout))
@@ -276,7 +278,6 @@ func findIDLight() {
 		rsBuf := make([]byte, 1024)
 		size, _, err := socket.ReadFromUDP(rsBuf)
 		if err != nil {
-			fmt.Println(err)
 			continue
 		}
 		rs := rsBuf[0:size]
@@ -326,7 +327,7 @@ func (y *Yeelight) connect() {
 		}
 	}
 
-	// go y.stayActive()
+	go y.stayActive()
 }
 
 func (y *Yeelight) disconnect() {
