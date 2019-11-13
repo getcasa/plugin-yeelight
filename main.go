@@ -112,7 +112,7 @@ type Params struct {
 
 // OnStart start UDP server to get Xiaomi data
 func OnStart(config []byte) {
-	go Discover()
+	Discover()
 
 	go func() {
 		for range time.Tick(5 * time.Second) {
@@ -149,7 +149,8 @@ func CallAction(physicalID string, name string, params []byte, config []byte) {
 		yee.Toggle()
 	default:
 	}
-	yee.Update()
+
+	go yee.Update()
 }
 
 // OnStop close connection
@@ -160,28 +161,18 @@ func OnStop() {
 	lights = nil
 }
 
-func containIPAddress(arr []string, search string) bool {
-	for _, addr := range arr {
-		if addr == search {
-			return true
-		}
-	}
-	return false
-}
-
 var wg sync.WaitGroup
 
 //Discover discovers device in local network
 func Discover() []sdk.Device {
 	var devices []sdk.Device
 
-	go func() {
-		discover()
-		findIDLight()
-	}()
+	go discover()
+	go findIDLight()
 
 	for _, light := range lights {
-		if light.ID == "" {
+		light.Update()
+		if light.ID == "" || !light.Connected || light.Socket == nil {
 			continue
 		}
 
@@ -228,31 +219,41 @@ func discover() error {
 		for i := 0; i < 255; i++ {
 			go func(i int, ipAddr string) {
 				ip := ipAddr + strconv.Itoa(i)
-				if findLightWithAddr(ip+":"+strconv.Itoa(yeelightPort)) != nil {
+				light := findLightWithAddr(ip + ":" + strconv.Itoa(yeelightPort))
+				if light != nil {
+					if !light.Connected || light.Socket == nil {
+						light.connect()
+					}
 					wg.Done()
 					return
 				}
-				ps := portscanner.NewPortScanner(ip, 10*time.Second, 4)
-				opened := ps.IsOpen(yeelightPort)
-				if !opened {
+				if !portscanner.NewPortScanner(ip, 10*time.Second, 4).IsOpen(yeelightPort) {
 					wg.Done()
 					return
 				}
 				newyee := New(ip + ":" + strconv.Itoa(yeelightPort))
 				newyee.connect()
-				if newyee == nil || !newyee.Connected {
+				if newyee == nil || !newyee.Connected || newyee.Socket == nil {
 					wg.Done()
 					return
 				}
 				lights = append(lights, newyee)
 				wg.Done()
 			}(i, ipAddr)
-
 		}
 	}
 	wg.Wait()
 
 	return nil
+}
+
+func containIPAddress(arr []string, search string) bool {
+	for _, addr := range arr {
+		if addr == search {
+			return true
+		}
+	}
+	return false
 }
 
 func findIDLight() {
@@ -292,7 +293,7 @@ func findIDLight() {
 }
 
 func (y *Yeelight) stayActive() {
-	for range time.Tick(20 * time.Second) {
+	for range time.Tick(15 * time.Second) {
 		y.Update()
 	}
 }
@@ -302,9 +303,9 @@ func (y *Yeelight) connect() {
 	if y.Socket != nil {
 		y.disconnect()
 	}
-	y.Socket, err = net.DialTimeout("tcp", y.Addr, 5*time.Second)
+	y.Socket, err = net.DialTimeout("tcp", y.Addr, 8*time.Second)
 	if err != nil {
-		fmt.Println("Error connection: " + y.Addr)
+		fmt.Println("Error connection: " + y.Addr + ", error: " + err.Error())
 		return
 	}
 
@@ -331,7 +332,9 @@ func (y *Yeelight) connect() {
 }
 
 func (y *Yeelight) disconnect() {
-	y.Socket.Close()
+	if y.Socket != nil {
+		y.Socket.Close()
+	}
 	y.Socket = nil
 	y.Connected = false
 }
@@ -343,18 +346,6 @@ func New(addr string) *Yeelight {
 		rnd:  rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 
-}
-
-func findLightWithAddr(addr string) *Yeelight {
-	if len(lights) == 0 {
-		return nil
-	}
-	for _, light := range lights {
-		if light.Addr == addr || light.ID == addr {
-			return light
-		}
-	}
-	return nil
 }
 
 //Update update yeelight info
@@ -369,6 +360,11 @@ func (y *Yeelight) Update() bool {
 
 	on, err := y.GetProp("power", "color_mode", "ct", "rgb", "hue", "sat", "bright", "flowing", "delayoff", "flow_params", "music_on")
 	if err != nil {
+		if strings.Contains(err.Error(), "i/o timeout") {
+			y.disconnect()
+		}
+		fmt.Println(err)
+		fmt.Println("err Update: " + y.Addr + " + " + y.ID)
 		return false
 	}
 
@@ -519,4 +515,16 @@ func closeConnection(c net.Conn) {
 	if nil != c {
 		c.Close()
 	}
+}
+
+func findLightWithAddr(addr string) *Yeelight {
+	if len(lights) == 0 {
+		return nil
+	}
+	for _, light := range lights {
+		if light.Addr == addr || light.ID == addr {
+			return light
+		}
+	}
+	return nil
 }
