@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/rand"
 	"net"
@@ -102,6 +103,7 @@ type (
 		rnd        *rand.Rand
 		Socket     net.Conn
 		Connected  bool
+		Stay       bool
 	}
 )
 
@@ -293,7 +295,11 @@ func findIDLight() {
 }
 
 func (y *Yeelight) stayActive() {
-	for range time.Tick(15 * time.Second) {
+	y.Stay = true
+	for range time.Tick(60 * time.Second) {
+		if !y.Stay {
+			break
+		}
 		y.Update()
 	}
 }
@@ -328,7 +334,9 @@ func (y *Yeelight) connect() {
 		}
 	}
 
-	go y.stayActive()
+	if !y.Stay {
+		go y.stayActive()
+	}
 }
 
 func (y *Yeelight) disconnect() {
@@ -344,6 +352,7 @@ func New(addr string) *Yeelight {
 	return &Yeelight{
 		Addr: addr,
 		rnd:  rand.New(rand.NewSource(time.Now().UnixNano())),
+		Stay: false,
 	}
 
 }
@@ -367,6 +376,7 @@ func (y *Yeelight) Update() bool {
 		fmt.Println("err Update: " + y.Addr + " + " + y.ID)
 		return false
 	}
+	fmt.Println("UPDATE " + y.Addr)
 
 	if len(on) >= 1 {
 		y.Power = on[0].(string)
@@ -429,6 +439,9 @@ func (y *Yeelight) GetProp(values ...interface{}) ([]interface{}, error) {
 	if nil != err {
 		return nil, err
 	}
+	if r == nil || r.Result == nil {
+		return nil, errors.New("no data found")
+	}
 	return r.Result, nil
 }
 
@@ -453,10 +466,17 @@ func (y *Yeelight) execute(cmd *Command) (*CommandResult, error) {
 
 	y.Socket.SetReadDeadline(time.Now().Add(timeout))
 
-	b, _ := json.Marshal(cmd)
+	b, err := json.Marshal(cmd)
+	if err != nil || y.Socket == nil {
+		fmt.Println(err)
+		return nil, nil
+	}
 	fmt.Fprint(y.Socket, string(b)+crlf)
 
 	reply := make([]byte, 1024)
+	if y.Socket == nil {
+		return nil, nil
+	}
 	size, err := y.Socket.Read(reply)
 	if err != nil {
 		return nil, fmt.Errorf("cannot read command result %s", err)
