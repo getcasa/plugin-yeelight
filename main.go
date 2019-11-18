@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -40,6 +41,73 @@ var Config = sdk.Configuration{
 	Version:     "1.0.0",
 	Author:      "amoinier",
 	Description: "Controls yeelight ecosystem",
+	Devices: []sdk.Device{
+		sdk.Device{
+			Name:           "stripe",
+			Description:    "",
+			DefaultTrigger: "power",
+			DefaultAction:  "toggle",
+			Triggers: []sdk.Trigger{
+				sdk.Trigger{
+					Name:          "Power",
+					Direct:        false,
+					Type:          "string",
+					Possibilities: []string{"on", "off"},
+				},
+				sdk.Trigger{
+					Name:   "Bright",
+					Direct: false,
+					Type:   "int",
+				},
+				sdk.Trigger{
+					Name:   "ColorMode",
+					Direct: false,
+					Type:   "int",
+				},
+				sdk.Trigger{
+					Name:   "CT",
+					Direct: false,
+					Type:   "int",
+				},
+				sdk.Trigger{
+					Name:   "RGB",
+					Direct: false,
+					Type:   "int",
+				},
+				sdk.Trigger{
+					Name:   "Hue",
+					Direct: false,
+					Type:   "int",
+				},
+				sdk.Trigger{
+					Name:   "Sat",
+					Direct: false,
+					Type:   "int",
+				},
+				sdk.Trigger{
+					Name:   "Flowing",
+					Direct: false,
+					Type:   "int",
+				},
+				sdk.Trigger{
+					Name:   "DelayOff",
+					Direct: false,
+					Type:   "int",
+				},
+				sdk.Trigger{
+					Name:   "FlowParams",
+					Direct: false,
+					Type:   "int",
+				},
+				sdk.Trigger{
+					Name:   "MusicOn",
+					Direct: false,
+					Type:   "int",
+				},
+			},
+			Actions: []string{"setpower", "toggle"},
+		},
+	},
 	Actions: []sdk.Action{
 		sdk.Action{
 			Name: "setpower",
@@ -55,11 +123,32 @@ var Config = sdk.Configuration{
 			Name:   "toggle",
 			Fields: []sdk.Field{},
 		},
+		sdk.Action{
+			Name: "set_ct",
+			Fields: []sdk.Field{
+				sdk.Field{
+					Name:   "ct_value",
+					Type:   "int",
+					Config: true,
+				},
+				sdk.Field{
+					Name:   "effect",
+					Type:   "string",
+					Config: true,
+				},
+				sdk.Field{
+					Name:   "duration",
+					Type:   "int",
+					Config: true,
+				},
+			},
+		},
 	},
 }
 
 var (
 	lights []*Yeelight
+	datas  chan sdk.Data
 )
 
 type (
@@ -109,11 +198,18 @@ type (
 
 // Params define actions parameters available
 type Params struct {
-	State bool
+	State    bool
+	CtValue  int    `db:"ct_value" json:"ctValue"`
+	Effect   string `db:"effect" json:"effect"`
+	Duration int    `db:"duration" json:"duration"`
+	Action   int    `db:"action" json:"action"`
+	Host     string `db:"host" json:"host"`
+	Port     string `db:"port" json:"port"`
 }
 
 // OnStart start UDP server to get Xiaomi data
 func OnStart(config []byte) {
+	datas = make(chan sdk.Data)
 	Discover()
 
 	go func() {
@@ -123,6 +219,13 @@ func OnStart(config []byte) {
 	}()
 
 	return
+}
+
+// OnData func
+func OnData() []sdk.Data {
+	toSend := <-datas
+
+	return []sdk.Data{toSend}
 }
 
 // CallAction call functions from actions
@@ -149,6 +252,10 @@ func CallAction(physicalID string, name string, params []byte, config []byte) {
 		yee.SetPower(req.State)
 	case "toggle":
 		yee.Toggle()
+	case "set_ct":
+		yee.StartFunc("set_ct_abx", req.CtValue, req.Effect, req.Duration)
+	case "music":
+		yee.StartFunc("set_music", req.Action, req.Host, req.Port)
 	default:
 	}
 
@@ -166,8 +273,8 @@ func OnStop() {
 var wg sync.WaitGroup
 
 //Discover discovers device in local network
-func Discover() []sdk.Device {
-	var devices []sdk.Device
+func Discover() []sdk.DiscoveredDevice {
+	var devices []sdk.DiscoveredDevice
 
 	go discover()
 	go findIDLight()
@@ -178,7 +285,7 @@ func Discover() []sdk.Device {
 			continue
 		}
 
-		devices = append(devices, sdk.Device{
+		devices = append(devices, sdk.DiscoveredDevice{
 			Name:         light.Name,
 			PhysicalID:   light.ID,
 			PhysicalName: light.Model,
@@ -294,16 +401,6 @@ func findIDLight() {
 	}
 }
 
-func (y *Yeelight) stayActive() {
-	y.Stay = true
-	for range time.Tick(60 * time.Second) {
-		if !y.Stay {
-			break
-		}
-		y.Update()
-	}
-}
-
 func (y *Yeelight) connect() {
 	var err error
 	if y.Socket != nil {
@@ -333,10 +430,6 @@ func (y *Yeelight) connect() {
 			y.Name = info[1].(string)
 		}
 	}
-
-	if !y.Stay {
-		go y.stayActive()
-	}
 }
 
 func (y *Yeelight) disconnect() {
@@ -360,12 +453,12 @@ func New(addr string) *Yeelight {
 //Update update yeelight info
 func (y *Yeelight) Update() bool {
 
-	if !y.Connected || y.Socket == nil {
-		y.connect()
-		if y.Socket == nil {
-			return false
-		}
-	}
+	// if !y.Connected || y.Socket == nil {
+	// 	y.connect()
+	// 	if y.Socket == nil {
+	// 		return false
+	// 	}
+	// }
 
 	on, err := y.GetProp("power", "color_mode", "ct", "rgb", "hue", "sat", "bright", "flowing", "delayoff", "flow_params", "music_on")
 	if err != nil {
@@ -411,6 +504,30 @@ func (y *Yeelight) Update() bool {
 	if len(on) >= 11 {
 		y.MusicOn, _ = strconv.Atoi(on[10].(string))
 	}
+
+	go func() {
+		if y.ID != "" {
+			newData := sdk.Data{
+				Plugin:       Config.Name,
+				PhysicalName: y.Model,
+				PhysicalID:   y.ID,
+			}
+
+			for _, field := range sdk.FindDevicesFromName(Config.Devices, y.Model).Triggers {
+				saveValue := reflect.ValueOf(y).Elem().FieldByName(field.Name).String()
+				if field.Type == "int" {
+					saveValue = strconv.Itoa(int(reflect.ValueOf(y).Elem().FieldByName(field.Name).Int()))
+				}
+				newData.Values = append(newData.Values, sdk.Value{
+					Name:  field.Name,
+					Value: []byte(saveValue),
+					Type:  field.Type,
+				})
+			}
+			datas <- newData
+		}
+	}()
+
 	return true
 }
 
@@ -429,6 +546,13 @@ func (y *Yeelight) SetPower(on bool) error {
 //Toggle is used to switch on or off the smart LED (software managed on/off).
 func (y *Yeelight) Toggle() error {
 	_, err := y.executeCommand("toggle")
+
+	return err
+}
+
+//StartFunc is used to Launch every yeelight action.
+func (y *Yeelight) StartFunc(funcName string, values ...interface{}) error {
+	_, err := y.executeCommand(funcName, values...)
 
 	return err
 }
