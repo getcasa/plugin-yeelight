@@ -277,11 +277,41 @@ func OnStart(config []byte) {
 	datas = make(chan sdk.Data)
 	Discover()
 
-	go func() {
-		for range time.Tick(5 * time.Second) {
-			findIDLight()
-		}
-	}()
+	// success := make(chan string, 1)
+	// searchString := discoverMSG
+	// ip := ""
+	// var err error
+	// ssdp, _ := net.ResolveUDPAddr("udp4", ssdpAddr)
+	// c, _ := net.ListenPacket("udp4", ":0")
+	// socket := c.(*net.UDPConn)
+	// message := []byte(searchString)
+	// for range time.Tick(250 * time.Millisecond) {
+	// 	go func() {
+	// 		socket.WriteToUDP(message, ssdp)
+	// 		answerBytes := make([]byte, 1024)
+	// 		// stores result in answerBytes (pass-by-reference)
+	// 		_, _, err = socket.ReadFromUDP(answerBytes)
+	// 		if err == nil {
+	// 			response := string(answerBytes)
+	// 			// extract IP address from full response
+	// 			startIndex := strings.Index(response, "id: ") + 10
+	// 			endIndex := strings.Index(response, "model: ") - 2
+	// 			ip = response[startIndex:endIndex]
+	// 			success <- ip
+	// 			// fmt.Println(response)
+	// 			fmt.Println(parseID(response))
+	// 		}
+	// 	}()
+
+	// 	select {
+	// 	case <-success:
+	// 		// fmt.Println(result)
+	// 	case <-time.After(timeout):
+	// 		fmt.Println("Timed out searching for hub\n")
+	// 	}
+	// 	// fmt.Println(ip)
+	// 	// fmt.Println(err)
+	// }
 
 	return
 }
@@ -340,7 +370,7 @@ var wg sync.WaitGroup
 func Discover() []sdk.DiscoveredDevice {
 	var devices []sdk.DiscoveredDevice
 
-	go discover()
+	discover()
 	go findIDLight()
 
 	for _, light := range lights {
@@ -430,6 +460,12 @@ func containIPAddress(arr []string, search string) bool {
 }
 
 func findIDLight() {
+	ssdp, _ := net.ResolveUDPAddr("udp4", ssdpAddr)
+	c, err := net.ListenPacket("udp4", ":0")
+	if err != nil {
+		fmt.Println(err)
+	}
+	socket := c.(*net.UDPConn)
 	check := true
 	for check {
 		time.Sleep(250 * time.Millisecond)
@@ -440,12 +476,7 @@ func findIDLight() {
 				break
 			}
 		}
-		ssdp, _ := net.ResolveUDPAddr("udp4", ssdpAddr)
-		c, err := net.ListenPacket("udp4", ":0")
-		if err != nil {
-			continue
-		}
-		socket := c.(*net.UDPConn)
+
 		socket.WriteToUDP([]byte(discoverMSG), ssdp)
 		socket.SetReadDeadline(time.Now().Add(timeout))
 
@@ -462,6 +493,10 @@ func findIDLight() {
 			findLightWithAddr(addr).ID = parseID(string(rs))
 			fmt.Println(addr + " - " + parseID(string(rs)))
 		}
+	}
+	err = socket.Close()
+	if err != nil {
+		fmt.Println(err)
 	}
 }
 
