@@ -107,6 +107,71 @@ var Config = sdk.Configuration{
 			},
 			Actions: []string{"setpower", "toggle"},
 		},
+		sdk.Device{
+			Name:           "color",
+			Description:    "",
+			DefaultTrigger: "power",
+			DefaultAction:  "toggle",
+			Triggers: []sdk.Trigger{
+				sdk.Trigger{
+					Name:          "Power",
+					Direct:        false,
+					Type:          "string",
+					Possibilities: []string{"on", "off"},
+				},
+				sdk.Trigger{
+					Name:   "Bright",
+					Direct: false,
+					Type:   "int",
+				},
+				sdk.Trigger{
+					Name:   "ColorMode",
+					Direct: false,
+					Type:   "int",
+				},
+				sdk.Trigger{
+					Name:   "CT",
+					Direct: false,
+					Type:   "int",
+				},
+				sdk.Trigger{
+					Name:   "RGB",
+					Direct: false,
+					Type:   "int",
+				},
+				sdk.Trigger{
+					Name:   "Hue",
+					Direct: false,
+					Type:   "int",
+				},
+				sdk.Trigger{
+					Name:   "Sat",
+					Direct: false,
+					Type:   "int",
+				},
+				sdk.Trigger{
+					Name:   "Flowing",
+					Direct: false,
+					Type:   "int",
+				},
+				sdk.Trigger{
+					Name:   "DelayOff",
+					Direct: false,
+					Type:   "int",
+				},
+				sdk.Trigger{
+					Name:   "FlowParams",
+					Direct: false,
+					Type:   "int",
+				},
+				sdk.Trigger{
+					Name:   "MusicOn",
+					Direct: false,
+					Type:   "int",
+				},
+			},
+			Actions: []string{"setpower", "toggle"},
+		},
 	},
 	Actions: []sdk.Action{
 		sdk.Action{
@@ -232,7 +297,6 @@ func OnData() []sdk.Data {
 func CallAction(physicalID string, name string, params []byte, config []byte) {
 	if string(params) == "" {
 		fmt.Println("Params must be provided")
-		return
 	}
 
 	// declare parameters
@@ -429,6 +493,17 @@ func (y *Yeelight) connect() {
 		if len(info) >= 2 {
 			y.Name = info[1].(string)
 		}
+	}
+
+	if !y.Stay {
+		y.Stay = true
+		go y.stayActive()
+	}
+}
+
+func (y *Yeelight) stayActive() {
+	for range time.Tick(5 * time.Minute) {
+		y.Update()
 	}
 }
 
