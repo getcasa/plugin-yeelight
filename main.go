@@ -277,42 +277,6 @@ func OnStart(config []byte) {
 	datas = make(chan sdk.Data)
 	Discover()
 
-	// success := make(chan string, 1)
-	// searchString := discoverMSG
-	// ip := ""
-	// var err error
-	// ssdp, _ := net.ResolveUDPAddr("udp4", ssdpAddr)
-	// c, _ := net.ListenPacket("udp4", ":0")
-	// socket := c.(*net.UDPConn)
-	// message := []byte(searchString)
-	// for range time.Tick(250 * time.Millisecond) {
-	// 	go func() {
-	// 		socket.WriteToUDP(message, ssdp)
-	// 		answerBytes := make([]byte, 1024)
-	// 		// stores result in answerBytes (pass-by-reference)
-	// 		_, _, err = socket.ReadFromUDP(answerBytes)
-	// 		if err == nil {
-	// 			response := string(answerBytes)
-	// 			// extract IP address from full response
-	// 			startIndex := strings.Index(response, "id: ") + 10
-	// 			endIndex := strings.Index(response, "model: ") - 2
-	// 			ip = response[startIndex:endIndex]
-	// 			success <- ip
-	// 			// fmt.Println(response)
-	// 			fmt.Println(parseID(response))
-	// 		}
-	// 	}()
-
-	// 	select {
-	// 	case <-success:
-	// 		// fmt.Println(result)
-	// 	case <-time.After(timeout):
-	// 		fmt.Println("Timed out searching for hub\n")
-	// 	}
-	// 	// fmt.Println(ip)
-	// 	// fmt.Println(err)
-	// }
-
 	return
 }
 
@@ -468,7 +432,6 @@ func findIDLight() {
 	socket := c.(*net.UDPConn)
 	check := true
 	for check {
-		time.Sleep(250 * time.Millisecond)
 		check = false
 		for _, light := range lights {
 			if light.ID == "" {
@@ -476,7 +439,6 @@ func findIDLight() {
 				break
 			}
 		}
-
 		socket.WriteToUDP([]byte(discoverMSG), ssdp)
 		socket.SetReadDeadline(time.Now().Add(timeout))
 
@@ -537,7 +499,7 @@ func (y *Yeelight) connect() {
 }
 
 func (y *Yeelight) stayActive() {
-	for range time.Tick(5 * time.Minute) {
+	for range time.Tick(10 * time.Second) {
 		y.Update()
 	}
 }
@@ -563,16 +525,16 @@ func New(addr string) *Yeelight {
 //Update update yeelight info
 func (y *Yeelight) Update() bool {
 
-	// if !y.Connected || y.Socket == nil {
-	// 	y.connect()
-	// 	if y.Socket == nil {
-	// 		return false
-	// 	}
-	// }
+	if !y.Connected || y.Socket == nil {
+		y.connect()
+		if y.Socket == nil {
+			return false
+		}
+	}
 
 	on, err := y.GetProp("power", "color_mode", "ct", "rgb", "hue", "sat", "bright", "flowing", "delayoff", "flow_params", "music_on")
 	if err != nil {
-		if strings.Contains(err.Error(), "i/o timeout") {
+		if strings.Contains(err.Error(), "i/o timeout") || strings.Contains(err.Error(), "result EOF") {
 			y.disconnect()
 		}
 		fmt.Println(err)
