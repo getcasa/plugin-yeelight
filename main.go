@@ -38,6 +38,7 @@ var Config = sdk.Configuration{
 	Version:     "1.0.0",
 	Author:      "amoinier",
 	Description: "Controls yeelight ecosystem",
+	Discover:    true,
 	Devices: []sdk.Device{
 		sdk.Device{
 			Name:           "stripe",
@@ -167,7 +168,7 @@ var Config = sdk.Configuration{
 					Type:   "int",
 				},
 			},
-			Actions: []string{"setpower", "toggle"},
+			Actions: []string{"toggle", "set_power", "set_ct", "set_rgb", "set_hsv", "set_bright", "set_default", "start_cf", "stop_cf", "cron_add", "cron_del", "set_adjust", "set_music"},
 		},
 	},
 	Actions: []sdk.Action{
@@ -545,6 +546,10 @@ func CallAction(physicalID string, name string, params []byte, config []byte) {
 	yee := findLightWithAddr(physicalID)
 	if yee == nil {
 		return
+	}
+
+	if !yee.UpdateToggle() {
+		yee.connect()
 	}
 
 	// use name to call actions
