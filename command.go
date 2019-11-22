@@ -8,30 +8,6 @@ import (
 	"time"
 )
 
-//SetPower is used to switch on or off the smart LED (software managed on/off).
-func (y *Yeelight) SetPower(on bool) error {
-	var status string
-	if on {
-		status = "on"
-	} else {
-		status = "off"
-	}
-	_, err := y.executeCommand("set_power", status)
-	return err
-}
-
-//Toggle is used to switch on or off the smart LED (software managed on/off).
-func (y *Yeelight) Toggle() (interface{}, error) {
-	r, err := y.executeCommand("toggle")
-	if nil != err {
-		return nil, err
-	}
-	if r == nil || r.Result == nil {
-		return nil, errors.New("no data found")
-	}
-	return r.Result, nil
-}
-
 //StartFunc is used to Launch every yeelight action.
 func (y *Yeelight) StartFunc(funcName string, values ...interface{}) (interface{}, error) {
 	r, err := y.executeCommand(funcName, values...)
@@ -69,6 +45,7 @@ func (y *Yeelight) executeCommand(name string, params ...interface{}) (*CommandR
 func (y *Yeelight) execute(cmd *Command) (*CommandResult, error) {
 
 	if !y.Connected || y.Socket == nil {
+		y.connect()
 		return nil, nil
 	}
 

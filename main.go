@@ -102,7 +102,7 @@ var Config = sdk.Configuration{
 					Type:   "int",
 				},
 			},
-			Actions: []string{"setpower", "toggle"},
+			Actions: []string{"toggle", "set_power", "set_ct", "set_rgb", "set_hsv", "set_bright", "set_default", "start_cf", "stop_cf", "cron_add", "cron_del", "set_adjust", "set_music"},
 		},
 		sdk.Device{
 			Name:           "color",
@@ -172,18 +172,38 @@ var Config = sdk.Configuration{
 	},
 	Actions: []sdk.Action{
 		sdk.Action{
-			Name: "setpower",
+			Name:   "toggle",
+			Fields: []sdk.Field{},
+		},
+		sdk.Action{
+			Name: "set_power",
 			Fields: []sdk.Field{
 				sdk.Field{
-					Name:   "state",
-					Type:   "string",
+					Name:          "power",
+					Type:          "string",
+					Possibilities: []string{"off", "on"},
+					Config:        true,
+				},
+				sdk.Field{
+					Name:          "effect",
+					Type:          "string",
+					Possibilities: []string{"off", "on"},
+					Config:        true,
+				},
+				sdk.Field{
+					Name:   "duration",
+					Type:   "int",
+					Min:    30,
+					Config: true,
+				},
+				sdk.Field{
+					Name:   "mode",
+					Type:   "int",
+					Min:    0,
+					Max:    5,
 					Config: true,
 				},
 			},
-		},
-		sdk.Action{
-			Name:   "toggle",
-			Fields: []sdk.Field{},
 		},
 		sdk.Action{
 			Name: "set_ct",
@@ -194,13 +214,219 @@ var Config = sdk.Configuration{
 					Config: true,
 				},
 				sdk.Field{
-					Name:   "effect",
-					Type:   "string",
-					Config: true,
+					Name:          "effect",
+					Type:          "string",
+					Possibilities: []string{"sudden", "smooth"},
+					Config:        true,
 				},
 				sdk.Field{
 					Name:   "duration",
 					Type:   "int",
+					Min:    30,
+					Config: true,
+				},
+			},
+		},
+
+		sdk.Action{
+			Name: "set_rgb",
+			Fields: []sdk.Field{
+				sdk.Field{
+					Name:   "rgb_value",
+					Type:   "int",
+					Min:    0,
+					Max:    16777215,
+					Config: true,
+				},
+				sdk.Field{
+					Name:          "effect",
+					Type:          "string",
+					Possibilities: []string{"sudden", "smooth"},
+					Config:        true,
+				},
+				sdk.Field{
+					Name:   "duration",
+					Type:   "int",
+					Min:    30,
+					Config: true,
+				},
+			},
+		},
+
+		sdk.Action{
+			Name: "set_hsv",
+			Fields: []sdk.Field{
+				sdk.Field{
+					Name:   "hue",
+					Type:   "int",
+					Min:    0,
+					Max:    359,
+					Config: true,
+				},
+				sdk.Field{
+					Name:   "sat",
+					Type:   "int",
+					Min:    0,
+					Max:    100,
+					Config: true,
+				},
+				sdk.Field{
+					Name:          "effect",
+					Type:          "string",
+					Possibilities: []string{"sudden", "smooth"},
+					Config:        true,
+				},
+				sdk.Field{
+					Name:   "duration",
+					Type:   "int",
+					Min:    30,
+					Config: true,
+				},
+			},
+		},
+
+		sdk.Action{
+			Name: "set_bright",
+			Fields: []sdk.Field{
+				sdk.Field{
+					Name:   "brightness",
+					Type:   "int",
+					Min:    1,
+					Max:    100,
+					Config: true,
+				},
+				sdk.Field{
+					Name:          "effect",
+					Type:          "string",
+					Possibilities: []string{"sudden", "smooth"},
+					Config:        true,
+				},
+				sdk.Field{
+					Name:   "duration",
+					Type:   "int",
+					Min:    30,
+					Config: true,
+				},
+			},
+		},
+
+		sdk.Action{
+			Name: "set_default",
+			Fields: []sdk.Field{
+				sdk.Field{},
+			},
+		},
+
+		sdk.Action{
+			Name: "start_cf",
+			Fields: []sdk.Field{
+				sdk.Field{
+					Name:   "count",
+					Type:   "int",
+					Min:    0,
+					Config: true,
+				},
+				sdk.Field{
+					Name:   "action",
+					Type:   "int",
+					Min:    0,
+					Max:    2,
+					Config: true,
+				},
+				sdk.Field{
+					Name:   "flow_expression",
+					Type:   "string",
+					Config: true,
+				},
+			},
+		},
+
+		sdk.Action{
+			Name: "stop_cf",
+			Fields: []sdk.Field{
+				sdk.Field{},
+			},
+		},
+
+		sdk.Action{
+			Name: "cron_add",
+			Fields: []sdk.Field{
+				sdk.Field{
+					Name:   "type",
+					Type:   "int",
+					Min:    0,
+					Max:    0,
+					Config: true,
+				},
+				sdk.Field{
+					Name:   "value",
+					Type:   "int",
+					Min:    1,
+					Config: true,
+				},
+			},
+		},
+
+		sdk.Action{
+			Name: "cron_del",
+			Fields: []sdk.Field{
+				sdk.Field{
+					Name:   "type",
+					Type:   "int",
+					Min:    0,
+					Max:    0,
+					Config: true,
+				},
+			},
+		},
+
+		sdk.Action{
+			Name: "set_adjust",
+			Fields: []sdk.Field{
+				sdk.Field{
+					Name:          "action",
+					Type:          "string",
+					Possibilities: []string{"increase", "decrease", "circle"},
+					Config:        true,
+				},
+				sdk.Field{
+					Name:          "prop",
+					Type:          "string",
+					Possibilities: []string{"bright", "ct", "color"},
+					Config:        true,
+				},
+			},
+		},
+
+		sdk.Action{
+			Name: "set_music",
+			Fields: []sdk.Field{
+				sdk.Field{
+					Name:   "action",
+					Type:   "int",
+					Min:    0,
+					Max:    1,
+					Config: true,
+				},
+				sdk.Field{
+					Name:   "host",
+					Type:   "string",
+					Config: true,
+				},
+				sdk.Field{
+					Name:   "post",
+					Type:   "string",
+					Config: true,
+				},
+			},
+		},
+
+		sdk.Action{
+			Name: "set_name",
+			Fields: []sdk.Field{
+				sdk.Field{
+					Name:   "name",
+					Type:   "string",
 					Config: true,
 				},
 			},
@@ -260,13 +486,33 @@ type (
 
 // Params define actions parameters available
 type Params struct {
-	State    bool
-	CtValue  int    `db:"ct_value" json:"ctValue"`
-	Effect   string `db:"effect" json:"effect"`
-	Duration int    `db:"duration" json:"duration"`
-	Action   int    `db:"action" json:"action"`
-	Host     string `db:"host" json:"host"`
-	Port     string `db:"port" json:"port"`
+	Power          string           `db:"power" json:"power"`
+	CtValue        int              `db:"ct_value" json:"ctValue"`
+	RGBValue       int              `db:"rgb_value" json:"rgbValue"`
+	Effect         string           `db:"effect" json:"effect"`
+	Duration       int              `db:"duration" json:"duration"`
+	Action         int              `db:"action" json:"action"`
+	ActionAdjust   string           `db:"action_adjust" json:"actionAdjust"`
+	Hue            int              `db:"hue" json:"hue"`
+	Sat            int              `db:"sat" json:"sat"`
+	Bright         int              `db:"bright" json:"bright"`
+	Count          int              `db:"count" json:"count"`
+	FlowExpression []flowExpression `db:"flow_expression" json:"flowExpression"`
+	Mode           int              `db:"mode" json:"mode"`
+	Host           string           `db:"host" json:"host"`
+	Port           string           `db:"port" json:"port"`
+	Type           string           `db:"type" json:"type"`
+	Prop           string           `db:"prop" json:"prop"`
+	ActionStr      string           `db:"action_str" json:"actionStr"`
+	Value          string           `db:"value" json:"value"`
+	Name           string           `db:"name" json:"name"`
+}
+
+type flowExpression struct {
+	Duration int
+	Mode     int
+	Value    int
+	Bright   int
 }
 
 // OnStart start UDP server to get Xiaomi data
@@ -303,21 +549,84 @@ func CallAction(physicalID string, name string, params []byte, config []byte) {
 
 	// use name to call actions
 	switch name {
-	case "setpower":
-		yee.SetPower(req.State)
-		go yee.Update()
 	case "toggle":
-		_, err := yee.Toggle()
+		_, err := yee.StartFunc("toggle")
 		if err == nil {
-			fmt.Println("UPDATE TOGGLE")
 			go yee.UpdateToggle()
 		}
+	case "set_power":
+		_, err := yee.StartFunc("set_power", req.Power, req.Effect, req.Duration, req.Mode)
+		if err == nil {
+			go yee.Update()
+		}
 	case "set_ct":
-		yee.StartFunc("set_ct_abx", req.CtValue, req.Effect, req.Duration)
-		go yee.Update()
-	case "music":
-		yee.StartFunc("set_music", req.Action, req.Host, req.Port)
-		go yee.Update()
+		_, err := yee.StartFunc("set_ct_abx", req.CtValue, req.Effect, req.Duration)
+		if err == nil {
+			go yee.Update()
+		}
+	case "set_rgb":
+		_, err := yee.StartFunc("set_rgb", req.RGBValue, req.Effect, req.Duration)
+		if err == nil {
+			go yee.Update()
+		}
+	case "set_hsv":
+		_, err := yee.StartFunc("set_rgb", req.Hue, req.Sat, req.Effect, req.Duration)
+		if err == nil {
+			go yee.Update()
+		}
+	case "set_bright":
+		_, err := yee.StartFunc("set_bright", req.Bright, req.Effect, req.Duration)
+		if err == nil {
+			go yee.Update()
+		}
+	case "set_default":
+		_, err := yee.StartFunc("set_default")
+		if err == nil {
+			go yee.Update()
+		}
+	case "start_cf":
+		flowExpression := "{"
+		for ind, flow := range req.FlowExpression {
+			flowExpression += strconv.Itoa(flow.Duration) + "," + strconv.Itoa(flow.Mode) + "," + strconv.Itoa(flow.Value) + "," + strconv.Itoa(flow.Bright)
+			if ind != len(req.FlowExpression)-1 {
+				flowExpression += ","
+			}
+		}
+		flowExpression += "}"
+		_, err := yee.StartFunc("start_cf", req.Count, req.Action, flowExpression)
+		if err == nil {
+			go yee.Update()
+		}
+	case "stop_cf":
+		_, err := yee.StartFunc("stop_cf")
+		if err == nil {
+			go yee.Update()
+		}
+	case "cron_add":
+		_, err := yee.StartFunc("cron_add", req.Type, req.Value)
+		if err == nil {
+			go yee.Update()
+		}
+	case "cron_del":
+		_, err := yee.StartFunc("cron_del", req.Type)
+		if err == nil {
+			go yee.Update()
+		}
+	case "set_adjust":
+		_, err := yee.StartFunc("set_adjust", req.ActionAdjust, req.Prop)
+		if err == nil {
+			go yee.Update()
+		}
+	case "set_music":
+		_, err := yee.StartFunc("set_music", req.Action, req.Host, req.Port)
+		if err == nil {
+			go yee.Update()
+		}
+	case "set_name":
+		_, err := yee.StartFunc("set_name", req.Name)
+		if err == nil {
+			go yee.Update()
+		}
 	default:
 	}
 }
@@ -353,7 +662,7 @@ func Discover() []sdk.DiscoveredDevice {
 }
 
 func findIDLight() {
-	ssdp, _ := net.ResolveUDPAddr("udp4", ssdpAddr)
+	ssdp, err := net.ResolveUDPAddr("udp4", ssdpAddr)
 	c, err := net.ListenPacket("udp4", ":0")
 	if err != nil {
 		fmt.Println(err)
@@ -367,18 +676,31 @@ func findIDLight() {
 		rsBuf := make([]byte, 1024)
 		size, _, err := socket.ReadFromUDP(rsBuf)
 		if err != nil {
+			fmt.Println(err)
+			c, err = net.ListenPacket("udp4", ":0")
+			socket = c.(*net.UDPConn)
 			continue
 		}
 		rs := rsBuf[0:size]
 
 		addr := parseAddr(string(rs))
-		if findLightWithAddr(addr) == nil {
-			newyee := New(addr)
-			newyee.ID = parseID(string(rs))
-			fmt.Println(addr + " - " + parseID(string(rs)))
+		newyee := findLightWithAddr(addr)
+		if newyee == nil {
+			newyee = New(addr)
 			lights = append(lights, newyee)
 			newyee.connect()
+			fmt.Println(addr + " - " + parseID(string(rs)))
 		}
+		newyee.ID = parseID(string(rs))
+		newyee.Model = parseInfo(string(rs), "Model")
+		newyee.Name = parseInfo(string(rs), "Name")
+		newyee.Power = parseInfo(string(rs), "Power")
+		newyee.Bright, _ = strconv.Atoi(parseInfo(string(rs), "Bright"))
+		newyee.ColorMode, _ = strconv.Atoi(parseInfo(string(rs), "Color_mode"))
+		newyee.CT, _ = strconv.Atoi(parseInfo(string(rs), "CT"))
+		newyee.RGB, _ = strconv.Atoi(parseInfo(string(rs), "RGB"))
+		newyee.Hue, _ = strconv.Atoi(parseInfo(string(rs), "Hue"))
+		newyee.Sat, _ = strconv.Atoi(parseInfo(string(rs), "Sat"))
 	}
 	err = socket.Close()
 	if err != nil {
@@ -400,46 +722,24 @@ func (y *Yeelight) connect() {
 	fmt.Println("Connected: " + y.Addr)
 	y.Connected = true
 
-	fmt.Println("CONNECT UPDATE")
 	status := y.Update()
 	if !status {
 		y.disconnect()
 		return
 	}
 
-	info, err := y.GetProp("model", "name")
-	if err == nil {
-		if len(info) >= 1 {
-			y.Model = info[0].(string)
-		}
-		if len(info) >= 2 {
-			y.Name = info[1].(string)
-		}
+	if !y.Stay {
+		y.Stay = true
+		go y.stayActive()
 	}
-
-	// go func(c net.Conn) {
-	// 	connReader := bufio.NewReader(c)
-	// 	for {
-	// 		data, err := connReader.ReadString('\n')
-	// 		fmt.Println(err)
-	// 		if nil == err {
-	// 			fmt.Println(data)
-	// 		}
-
-	// 	}
-
-	// }(y.Socket)
-
-	// if !y.Stay {
-	// 	y.Stay = true
-	// 	go y.stayActive()
-	// }
 }
 
 func (y *Yeelight) stayActive() {
 	for range time.Tick(60 * time.Second) {
 		fmt.Println("STAYACTIVE UPDATE")
-		y.Update()
+		if y.Connected {
+			y.Update()
+		}
 	}
 }
 
@@ -471,7 +771,6 @@ func (y *Yeelight) Update() bool {
 	on, err := y.GetProp("power", "color_mode", "ct", "rgb", "hue", "sat", "bright", "flowing", "delayoff", "flow_params", "music_on")
 	if err != nil {
 		if strings.Contains(err.Error(), "i/o timeout") || strings.Contains(err.Error(), "result EOF") {
-			y.disconnect()
 			y.connect()
 		}
 		fmt.Println(err)
@@ -550,7 +849,6 @@ func (y *Yeelight) UpdateToggle() bool {
 	on, err := y.GetProp("power")
 	if err != nil {
 		if strings.Contains(err.Error(), "i/o timeout") || strings.Contains(err.Error(), "result EOF") {
-			y.disconnect()
 			y.connect()
 		}
 		fmt.Println(err)
@@ -616,6 +914,20 @@ func parseID(msg string) string {
 	}
 	defer resp.Body.Close()
 	return resp.Header.Get("ID")
+}
+
+//parseInfo parses address from ssdp response
+func parseInfo(msg string, field string) string {
+	if strings.HasSuffix(msg, crlf) {
+		msg = msg + crlf
+	}
+	resp, err := http.ReadResponse(bufio.NewReader(strings.NewReader(msg)), nil)
+	if err != nil {
+		fmt.Println(err)
+		return ""
+	}
+	defer resp.Body.Close()
+	return resp.Header.Get(field)
 }
 
 func (y *Yeelight) randID() int {
