@@ -210,7 +210,7 @@ var Config = sdk.Configuration{
 			Name: "set_ct",
 			Fields: []sdk.Field{
 				sdk.Field{
-					Name:   "ct_value",
+					Name:   "ct",
 					Type:   "int",
 					Config: true,
 				},
@@ -488,7 +488,7 @@ type (
 // Params define actions parameters available
 type Params struct {
 	Power          string           `db:"power" json:"power"`
-	CtValue        int              `db:"ct_value" json:"ctValue"`
+	Ct             int              `db:"ct" json:"ct"`
 	RGBValue       int              `db:"rgb_value" json:"rgbValue"`
 	Effect         string           `db:"effect" json:"effect"`
 	Duration       int              `db:"duration" json:"duration"`
@@ -548,10 +548,6 @@ func CallAction(physicalID string, name string, params []byte, config []byte) {
 		return
 	}
 
-	if !yee.UpdateToggle() {
-		yee.connect()
-	}
-
 	// use name to call actions
 	switch name {
 	case "toggle":
@@ -565,7 +561,7 @@ func CallAction(physicalID string, name string, params []byte, config []byte) {
 			go yee.Update()
 		}
 	case "set_ct":
-		_, err := yee.StartFunc("set_ct_abx", req.CtValue, req.Effect, req.Duration)
+		_, err := yee.StartFunc("set_ct_abx", req.Ct, req.Effect, req.Duration)
 		if err == nil {
 			go yee.Update()
 		}
@@ -674,9 +670,9 @@ func findIDLight() {
 	}
 	socket := c.(*net.UDPConn)
 	for {
+		socket.SetWriteDeadline(time.Now().Add(timeout))
 		socket.WriteToUDP([]byte(discoverMSG), ssdp)
 		socket.SetReadDeadline(time.Now().Add(timeout))
-		socket.SetWriteDeadline(time.Now().Add(timeout))
 
 		rsBuf := make([]byte, 1024)
 		size, _, err := socket.ReadFromUDP(rsBuf)
@@ -727,12 +723,6 @@ func (y *Yeelight) connect() {
 	fmt.Println("Connected: " + y.Addr)
 	y.Connected = true
 
-	status := y.Update()
-	if !status {
-		y.disconnect()
-		return
-	}
-
 	if !y.Stay {
 		y.Stay = true
 		go y.stayActive()
@@ -769,15 +759,8 @@ func New(addr string) *Yeelight {
 //Update update yeelight info
 func (y *Yeelight) Update() bool {
 
-	if !y.Connected || y.Socket == nil {
-		return false
-	}
-
 	on, err := y.GetProp("power", "color_mode", "ct", "rgb", "hue", "sat", "bright", "flowing", "delayoff", "flow_params", "music_on")
 	if err != nil {
-		if strings.Contains(err.Error(), "i/o timeout") || strings.Contains(err.Error(), "result EOF") {
-			y.connect()
-		}
 		fmt.Println(err)
 		fmt.Println("err Update: " + y.Addr + " + " + y.ID)
 		return false
@@ -847,15 +830,8 @@ func (y *Yeelight) Update() bool {
 //UpdateToggle update toggle yeelight info
 func (y *Yeelight) UpdateToggle() bool {
 
-	if !y.Connected || y.Socket == nil {
-		return false
-	}
-
 	on, err := y.GetProp("power")
 	if err != nil {
-		if strings.Contains(err.Error(), "i/o timeout") || strings.Contains(err.Error(), "result EOF") {
-			y.connect()
-		}
 		fmt.Println(err)
 		fmt.Println("err Update: " + y.Addr + " + " + y.ID)
 		return false

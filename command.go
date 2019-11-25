@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -43,42 +44,70 @@ func (y *Yeelight) executeCommand(name string, params ...interface{}) (*CommandR
 
 //executeCommand executes command
 func (y *Yeelight) execute(cmd *Command) (*CommandResult, error) {
-
-	if !y.Connected || y.Socket == nil {
-		y.connect()
-		return nil, nil
-	}
-
-	y.Socket.SetReadDeadline(time.Now().Add(timeout))
-
-	b, err := json.Marshal(cmd)
-	if err != nil || y.Socket == nil {
-		fmt.Println(err)
-		return nil, nil
-	}
-	fmt.Fprint(y.Socket, string(b)+crlf)
-
-	// reply := make([]byte, 1024)
-	if y.Socket == nil {
-		return nil, nil
-	}
-	// size, err := y.Socket.Read(reply)
-	reply, err := bufio.NewReader(y.Socket).ReadString('\n')
-	if err != nil {
-		return nil, fmt.Errorf("cannot read command result %s", err)
-	}
-
-	// reply = reply[:size]
-
 	var rs CommandResult
-	err = json.Unmarshal([]byte(reply), &rs)
-	if nil != err {
-		return nil, fmt.Errorf("cannot parse command result %s", err)
-	}
-	if nil != rs.Error {
-		return nil, fmt.Errorf("command execution error. Code: %d, Message: %s", rs.Error.Code, rs.Error.Message)
-	}
 
+	fmt.Println(cmd.Params)
+
+	hasError := true
+	for hasError {
+		fmt.Println("wow !")
+
+		if !y.Connected || y.Socket == nil {
+			hasError = true
+			y.connect()
+			fmt.Println("Reconnect yeelight if no connection")
+
+			continue
+		}
+
+		y.Socket.SetReadDeadline(time.Now().Add(10 * time.Second))
+
+		b, err := json.Marshal(cmd)
+		if err != nil || y.Socket == nil {
+			hasError = true
+			fmt.Println("No socket 1")
+			continue
+		}
+		fmt.Fprint(y.Socket, string(b)+crlf)
+
+		if y.Socket == nil {
+			hasError = true
+			fmt.Println("No socket 2")
+			continue
+		}
+		reply, err := bufio.NewReader(y.Socket).ReadString('\n')
+		if err != nil {
+			if strings.Contains(err.Error(), "EOF") {
+				hasError = false
+				break
+			}
+			hasError = true
+			fmt.Println(fmt.Errorf("cannot read command result %s", err))
+			continue
+			return nil, fmt.Errorf("cannot read command result %s", err)
+		}
+
+		err = json.Unmarshal([]byte(reply), &rs)
+		if nil != err {
+			hasError = true
+			fmt.Println(fmt.Errorf("cannot parse command result %s", err))
+			continue
+			return nil, fmt.Errorf("cannot parse command result %s", err)
+		}
+		if nil != rs.Error {
+			if strings.Contains(rs.Error.Message, "client quota exceeded") || rs.Error.Code == -5001 {
+				hasError = false
+				break
+			}
+
+			hasError = true
+			fmt.Println(fmt.Errorf("command execution error. Code: %d, Message: %s", rs.Error.Code, rs.Error.Message))
+			continue
+			return nil, fmt.Errorf("command execution error. Code: %d, Message: %s", rs.Error.Code, rs.Error.Message)
+		}
+
+		hasError = false
+		continue
+	}
 	return &rs, nil
-
 }
