@@ -233,7 +233,7 @@ var Config = sdk.Configuration{
 			Name: "set_rgb",
 			Fields: []sdk.Field{
 				sdk.Field{
-					Name:   "rgb_value",
+					Name:   "rgbValue",
 					Type:   "int",
 					Min:    0,
 					Max:    16777215,
@@ -335,7 +335,7 @@ var Config = sdk.Configuration{
 					Config: true,
 				},
 				sdk.Field{
-					Name:   "flow_expression",
+					Name:   "flowExpression",
 					Type:   "string",
 					Config: true,
 				},
@@ -385,7 +385,7 @@ var Config = sdk.Configuration{
 			Name: "set_adjust",
 			Fields: []sdk.Field{
 				sdk.Field{
-					Name:          "action",
+					Name:          "actionAdjust",
 					Type:          "string",
 					Possibilities: []string{"increase", "decrease", "circle"},
 					Config:        true,
@@ -735,9 +735,6 @@ func (y *Yeelight) stayActive() {
 	for range time.Tick(10 * time.Second) {
 		if y.Connected {
 			count++
-			if count%6 == 0 {
-				y.Update(true)
-			}
 			y.Update(false)
 		}
 	}

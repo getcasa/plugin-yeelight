@@ -48,8 +48,6 @@ func (y *Yeelight) execute(cmd *Command) (*CommandResult, error) {
 
 	hasError := true
 	for hasError {
-		fmt.Println("wow !")
-
 		if !y.Connected || y.Socket == nil {
 			hasError = true
 			y.connect()
@@ -76,7 +74,9 @@ func (y *Yeelight) execute(cmd *Command) (*CommandResult, error) {
 		reply, err := bufio.NewReader(y.Socket).ReadString('\n')
 		if err != nil {
 			fmt.Println(fmt.Errorf("cannot read command result %s", err))
-			fmt.Println(reply)
+			if strings.Contains(err.Error(), "EOF") {
+				y.disconnect()
+			}
 			if strings.Contains(err.Error(), "EOF") || strings.Contains(err.Error(), "i/o timeout") {
 				hasError = false
 				break
