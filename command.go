@@ -46,8 +46,6 @@ func (y *Yeelight) executeCommand(name string, params ...interface{}) (*CommandR
 func (y *Yeelight) execute(cmd *Command) (*CommandResult, error) {
 	var rs CommandResult
 
-	fmt.Println(cmd.Params)
-
 	hasError := true
 	for hasError {
 		fmt.Println("wow !")
@@ -77,14 +75,14 @@ func (y *Yeelight) execute(cmd *Command) (*CommandResult, error) {
 		}
 		reply, err := bufio.NewReader(y.Socket).ReadString('\n')
 		if err != nil {
-			if strings.Contains(err.Error(), "EOF") {
+			fmt.Println(fmt.Errorf("cannot read command result %s", err))
+			fmt.Println(reply)
+			if strings.Contains(err.Error(), "EOF") || strings.Contains(err.Error(), "i/o timeout") {
 				hasError = false
 				break
 			}
 			hasError = true
-			fmt.Println(fmt.Errorf("cannot read command result %s", err))
 			continue
-			return nil, fmt.Errorf("cannot read command result %s", err)
 		}
 
 		err = json.Unmarshal([]byte(reply), &rs)
@@ -92,22 +90,19 @@ func (y *Yeelight) execute(cmd *Command) (*CommandResult, error) {
 			hasError = true
 			fmt.Println(fmt.Errorf("cannot parse command result %s", err))
 			continue
-			return nil, fmt.Errorf("cannot parse command result %s", err)
 		}
 		if nil != rs.Error {
+			fmt.Println(fmt.Errorf("command execution error. Code: %d, Message: %s", rs.Error.Code, rs.Error.Message))
 			if strings.Contains(rs.Error.Message, "client quota exceeded") || rs.Error.Code == -5001 {
 				hasError = false
 				break
 			}
 
 			hasError = true
-			fmt.Println(fmt.Errorf("command execution error. Code: %d, Message: %s", rs.Error.Code, rs.Error.Message))
 			continue
-			return nil, fmt.Errorf("command execution error. Code: %d, Message: %s", rs.Error.Code, rs.Error.Message)
 		}
 
 		hasError = false
-		continue
 	}
 	return &rs, nil
 }

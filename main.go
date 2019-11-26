@@ -558,32 +558,32 @@ func CallAction(physicalID string, name string, params []byte, config []byte) {
 	case "set_power":
 		_, err := yee.StartFunc("set_power", req.Power, req.Effect, req.Duration, req.Mode)
 		if err == nil {
-			go yee.Update()
+			go yee.Update(true)
 		}
 	case "set_ct":
 		_, err := yee.StartFunc("set_ct_abx", req.Ct, req.Effect, req.Duration)
 		if err == nil {
-			go yee.Update()
+			go yee.Update(true)
 		}
 	case "set_rgb":
 		_, err := yee.StartFunc("set_rgb", req.RGBValue, req.Effect, req.Duration)
 		if err == nil {
-			go yee.Update()
+			go yee.Update(true)
 		}
 	case "set_hsv":
 		_, err := yee.StartFunc("set_rgb", req.Hue, req.Sat, req.Effect, req.Duration)
 		if err == nil {
-			go yee.Update()
+			go yee.Update(true)
 		}
 	case "set_bright":
 		_, err := yee.StartFunc("set_bright", req.Bright, req.Effect, req.Duration)
 		if err == nil {
-			go yee.Update()
+			go yee.Update(true)
 		}
 	case "set_default":
 		_, err := yee.StartFunc("set_default")
 		if err == nil {
-			go yee.Update()
+			go yee.Update(true)
 		}
 	case "start_cf":
 		flowExpression := "{"
@@ -596,37 +596,37 @@ func CallAction(physicalID string, name string, params []byte, config []byte) {
 		flowExpression += "}"
 		_, err := yee.StartFunc("start_cf", req.Count, req.Action, flowExpression)
 		if err == nil {
-			go yee.Update()
+			go yee.Update(true)
 		}
 	case "stop_cf":
 		_, err := yee.StartFunc("stop_cf")
 		if err == nil {
-			go yee.Update()
+			go yee.Update(true)
 		}
 	case "cron_add":
 		_, err := yee.StartFunc("cron_add", req.Type, req.Value)
 		if err == nil {
-			go yee.Update()
+			go yee.Update(true)
 		}
 	case "cron_del":
 		_, err := yee.StartFunc("cron_del", req.Type)
 		if err == nil {
-			go yee.Update()
+			go yee.Update(true)
 		}
 	case "set_adjust":
 		_, err := yee.StartFunc("set_adjust", req.ActionAdjust, req.Prop)
 		if err == nil {
-			go yee.Update()
+			go yee.Update(true)
 		}
 	case "set_music":
 		_, err := yee.StartFunc("set_music", req.Action, req.Host, req.Port)
 		if err == nil {
-			go yee.Update()
+			go yee.Update(true)
 		}
 	case "set_name":
 		_, err := yee.StartFunc("set_name", req.Name)
 		if err == nil {
-			go yee.Update()
+			go yee.Update(true)
 		}
 	default:
 	}
@@ -644,9 +644,10 @@ func OnStop() {
 func Discover() []sdk.DiscoveredDevice {
 	var devices []sdk.DiscoveredDevice
 
+	go findIDLight()
+
 	for _, light := range lights {
-		fmt.Println("DISCOVER UPDATE")
-		light.Update()
+		light.Update(true)
 		if light.ID == "" || !light.Connected || light.Socket == nil {
 			continue
 		}
@@ -669,7 +670,7 @@ func findIDLight() {
 		fmt.Println(err)
 	}
 	socket := c.(*net.UDPConn)
-	for {
+	for start := time.Now(); time.Since(start) < 1*time.Minute; {
 		socket.SetWriteDeadline(time.Now().Add(timeout))
 		socket.WriteToUDP([]byte(discoverMSG), ssdp)
 		socket.SetReadDeadline(time.Now().Add(timeout))
@@ -730,10 +731,14 @@ func (y *Yeelight) connect() {
 }
 
 func (y *Yeelight) stayActive() {
-	for range time.Tick(60 * time.Second) {
-		fmt.Println("STAYACTIVE UPDATE")
+	count := 0
+	for range time.Tick(10 * time.Second) {
 		if y.Connected {
-			y.Update()
+			count++
+			if count%6 == 0 {
+				y.Update(true)
+			}
+			y.Update(false)
 		}
 	}
 }
@@ -757,7 +762,7 @@ func New(addr string) *Yeelight {
 }
 
 //Update update yeelight info
-func (y *Yeelight) Update() bool {
+func (y *Yeelight) Update(saveState bool) bool {
 
 	on, err := y.GetProp("power", "color_mode", "ct", "rgb", "hue", "sat", "bright", "flowing", "delayoff", "flow_params", "music_on")
 	if err != nil {
@@ -801,28 +806,30 @@ func (y *Yeelight) Update() bool {
 		y.MusicOn, _ = strconv.Atoi(on[10].(string))
 	}
 
-	go func() {
-		if y.ID != "" {
-			newData := sdk.Data{
-				Plugin:       Config.Name,
-				PhysicalName: y.Model,
-				PhysicalID:   y.ID,
-			}
-
-			for _, field := range sdk.FindDevicesFromName(Config.Devices, y.Model).Triggers {
-				saveValue := reflect.ValueOf(y).Elem().FieldByName(field.Name).String()
-				if field.Type == "int" {
-					saveValue = strconv.Itoa(int(reflect.ValueOf(y).Elem().FieldByName(field.Name).Int()))
+	if saveState {
+		go func() {
+			if y.ID != "" {
+				newData := sdk.Data{
+					Plugin:       Config.Name,
+					PhysicalName: y.Model,
+					PhysicalID:   y.ID,
 				}
-				newData.Values = append(newData.Values, sdk.Value{
-					Name:  field.Name,
-					Value: []byte(saveValue),
-					Type:  field.Type,
-				})
+
+				for _, field := range sdk.FindDevicesFromName(Config.Devices, y.Model).Triggers {
+					saveValue := reflect.ValueOf(y).Elem().FieldByName(field.Name).String()
+					if field.Type == "int" {
+						saveValue = strconv.Itoa(int(reflect.ValueOf(y).Elem().FieldByName(field.Name).Int()))
+					}
+					newData.Values = append(newData.Values, sdk.Value{
+						Name:  field.Name,
+						Value: []byte(saveValue),
+						Type:  field.Type,
+					})
+				}
+				datas <- newData
 			}
-			datas <- newData
-		}
-	}()
+		}()
+	}
 
 	return true
 }
@@ -831,9 +838,9 @@ func (y *Yeelight) Update() bool {
 func (y *Yeelight) UpdateToggle() bool {
 
 	on, err := y.GetProp("power")
-	if err != nil {
+	if err != nil || on[0].(string) == "ok" {
 		fmt.Println(err)
-		fmt.Println("err Update: " + y.Addr + " + " + y.ID)
+		fmt.Println("err Update Toggle: " + y.Addr + " + " + y.ID)
 		return false
 	}
 
