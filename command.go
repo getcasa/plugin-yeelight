@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -52,7 +51,6 @@ func (y *Yeelight) execute(cmd *Command) (*CommandResult, error) {
 			hasError = true
 			y.connect()
 			fmt.Println("Reconnect yeelight if no connection")
-
 			continue
 		}
 
@@ -71,10 +69,11 @@ func (y *Yeelight) execute(cmd *Command) (*CommandResult, error) {
 			fmt.Println("No socket 2")
 			continue
 		}
-		reply, err := bufio.NewReader(y.Socket).ReadString('\n')
+		reply := make([]byte, 1024)
+		size, err := y.Socket.Read(reply)
 		if err != nil {
 			fmt.Println(fmt.Errorf("cannot read command result %s", err))
-			if strings.Contains(err.Error(), "EOF") {
+			if strings.Contains(err.Error(), "EOF") || strings.Contains(err.Error(), "closed network") {
 				y.disconnect()
 			}
 			if strings.Contains(err.Error(), "EOF") || strings.Contains(err.Error(), "i/o timeout") {
@@ -84,14 +83,26 @@ func (y *Yeelight) execute(cmd *Command) (*CommandResult, error) {
 			hasError = true
 			continue
 		}
+		read := string(reply[:size])
 
-		err = json.Unmarshal([]byte(reply), &rs)
-		if nil != err {
+		splitRead := strings.Split(read, "\n")
+		if len(splitRead) > 1 {
+			read = splitRead[0]
+			for _, split := range splitRead {
+				if strings.Contains(split, "props") {
+					read = split
+					break
+				}
+			}
+		}
+
+		err = json.Unmarshal([]byte(read), &rs)
+		if err != nil {
 			hasError = true
 			fmt.Println(fmt.Errorf("cannot parse command result %s", err))
 			continue
 		}
-		if nil != rs.Error {
+		if rs.Error != nil {
 			fmt.Println(fmt.Errorf("command execution error. Code: %d, Message: %s", rs.Error.Code, rs.Error.Message))
 			if strings.Contains(rs.Error.Message, "client quota exceeded") || rs.Error.Code == -5001 {
 				hasError = false
