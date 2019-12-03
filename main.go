@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/getcasa/sdk"
@@ -312,10 +313,8 @@ var Config = sdk.Configuration{
 		},
 
 		sdk.Action{
-			Name: "set_default",
-			Fields: []sdk.Field{
-				sdk.Field{},
-			},
+			Name:   "set_default",
+			Fields: []sdk.Field{},
 		},
 
 		sdk.Action{
@@ -343,10 +342,8 @@ var Config = sdk.Configuration{
 		},
 
 		sdk.Action{
-			Name: "stop_cf",
-			Fields: []sdk.Field{
-				sdk.Field{},
-			},
+			Name:   "stop_cf",
+			Fields: []sdk.Field{},
 		},
 
 		sdk.Action{
@@ -615,22 +612,30 @@ func OnStop() {
 //Discover discovers device in local network
 func Discover() []sdk.DiscoveredDevice {
 	var devices []sdk.DiscoveredDevice
-
+	var waitgroup sync.WaitGroup
+	fmt.Println(1)
 	go findIDLight()
+	fmt.Println(2)
 
 	for _, light := range lights {
-		light.Update(true)
-		if light.ID == "" || !light.Connected || light.Socket == nil {
-			continue
-		}
+		waitgroup.Add(1)
+		func(light *Yeelight) {
+			if light.ID == "" || !light.Connected || light.Socket == nil {
+				waitgroup.Done()
+				return
+			}
 
-		devices = append(devices, sdk.DiscoveredDevice{
-			Name:         light.Name,
-			PhysicalID:   light.ID,
-			PhysicalName: light.Model,
-			Plugin:       Config.Name,
-		})
+			devices = append(devices, sdk.DiscoveredDevice{
+				Name:         light.Name,
+				PhysicalID:   light.ID,
+				PhysicalName: light.Model,
+				Plugin:       Config.Name,
+			})
+			waitgroup.Done()
+		}(light)
 	}
+	waitgroup.Wait()
+	fmt.Println(3)
 
 	return devices
 }
