@@ -26,10 +26,6 @@ func (y *Yeelight) GetProp(values ...interface{}) ([]string, error) {
 	if nil != err {
 		return nil, err
 	}
-	fmt.Println("CHECK VALUES")
-	fmt.Println(values)
-	fmt.Println(r.Params)
-	fmt.Println(r.Params["power"])
 	if r == nil || (r.Result == nil && r.Params == nil) {
 		return nil, errors.New("no data found")
 	}
@@ -39,7 +35,6 @@ func (y *Yeelight) GetProp(values ...interface{}) ([]string, error) {
 			r.Result = append(r.Result, r.Params[val.(string)])
 		}
 	}
-	fmt.Println(r.Result)
 	return r.Result, nil
 }
 
@@ -123,16 +118,6 @@ func (y *Yeelight) execute(cmd *Command) (*CommandResult, error) {
 			hasError = true
 			continue
 		}
-
-		fmt.Println(1)
-		fmt.Println(y.Addr)
-		fmt.Println(cmd)
-		fmt.Println(string(reply[:size]))
-		fmt.Println("++++++++++")
-		fmt.Println(read)
-		fmt.Println(rs)
-		fmt.Println(2)
-
 		hasError = false
 	}
 	return &rs, nil
