@@ -705,7 +705,7 @@ func (y *Yeelight) connect() {
 
 	if !y.Stay {
 		y.Stay = true
-		// go y.stayActive()
+		go y.stayActive()
 	}
 }
 
