@@ -9,7 +9,7 @@ import (
 )
 
 //StartFunc is used to Launch every yeelight action.
-func (y *Yeelight) StartFunc(funcName string, values ...interface{}) (interface{}, error) {
+func (y *Yeelight) StartFunc(funcName string, values ...interface{}) ([]string, error) {
 	r, err := y.executeCommand(funcName, values...)
 	if nil != err {
 		return nil, err
@@ -21,14 +21,25 @@ func (y *Yeelight) StartFunc(funcName string, values ...interface{}) (interface{
 }
 
 // GetProp method is used to retrieve current property of smart LED.
-func (y *Yeelight) GetProp(values ...interface{}) ([]interface{}, error) {
+func (y *Yeelight) GetProp(values ...interface{}) ([]string, error) {
 	r, err := y.executeCommand("get_prop", values...)
 	if nil != err {
 		return nil, err
 	}
-	if r == nil || r.Result == nil {
+	fmt.Println("CHECK VALUES")
+	fmt.Println(values)
+	fmt.Println(r.Params)
+	fmt.Println(r.Params["power"])
+	if r == nil || (r.Result == nil && r.Params == nil) {
 		return nil, errors.New("no data found")
 	}
+	if r.Params != nil {
+		r.Result = []string{}
+		for _, val := range values {
+			r.Result = append(r.Result, r.Params[val.(string)])
+		}
+	}
+	fmt.Println(r.Result)
 	return r.Result, nil
 }
 
@@ -76,7 +87,7 @@ func (y *Yeelight) execute(cmd *Command) (*CommandResult, error) {
 			if strings.Contains(err.Error(), "EOF") || strings.Contains(err.Error(), "closed network") {
 				y.disconnect()
 			}
-			if strings.Contains(err.Error(), "EOF") || strings.Contains(err.Error(), "i/o timeout") {
+			if cmd.Method != "get_prop" && (strings.Contains(err.Error(), "EOF") || strings.Contains(err.Error(), "i/o timeout")) {
 				hasError = false
 				break
 			}
@@ -112,6 +123,15 @@ func (y *Yeelight) execute(cmd *Command) (*CommandResult, error) {
 			hasError = true
 			continue
 		}
+
+		fmt.Println(1)
+		fmt.Println(y.Addr)
+		fmt.Println(cmd)
+		fmt.Println(string(reply[:size]))
+		fmt.Println("++++++++++")
+		fmt.Println(read)
+		fmt.Println(rs)
+		fmt.Println(2)
 
 		hasError = false
 	}

@@ -447,9 +447,11 @@ type (
 
 	// CommandResult represents response from Yeelight device
 	CommandResult struct {
-		ID     int           `json:"id"`
-		Result []interface{} `json:"result,omitempty"`
-		Error  *Error        `json:"error,omitempty"`
+		ID     int               `json:"id"`
+		Result []string          `json:"result,omitempty"`
+		Error  *Error            `json:"error,omitempty"`
+		Method string            `json:"method,omitempty"`
+		Params map[string]string `json:"params,omitempty"`
 	}
 
 	// Error struct represents error part of response
@@ -703,7 +705,7 @@ func (y *Yeelight) connect() {
 
 	if !y.Stay {
 		y.Stay = true
-		go y.stayActive()
+		// go y.stayActive()
 	}
 }
 
@@ -745,37 +747,37 @@ func (y *Yeelight) Update(saveState bool) bool {
 	}
 
 	if len(on) >= 1 {
-		y.Power = on[0].(string)
+		y.Power = on[0]
 	}
 	if len(on) >= 2 {
-		y.ColorMode, _ = strconv.Atoi(on[1].(string))
+		y.ColorMode, _ = strconv.Atoi(on[1])
 	}
 	if len(on) >= 3 {
-		y.CT, _ = strconv.Atoi(on[2].(string))
+		y.CT, _ = strconv.Atoi(on[2])
 	}
 	if len(on) >= 4 {
-		y.RGB, _ = strconv.Atoi(on[3].(string))
+		y.RGB, _ = strconv.Atoi(on[3])
 	}
 	if len(on) >= 5 {
-		y.Hue, _ = strconv.Atoi(on[4].(string))
+		y.Hue, _ = strconv.Atoi(on[4])
 	}
 	if len(on) >= 6 {
-		y.Sat, _ = strconv.Atoi(on[5].(string))
+		y.Sat, _ = strconv.Atoi(on[5])
 	}
 	if len(on) >= 7 {
-		y.Bright, _ = strconv.Atoi(on[6].(string))
+		y.Bright, _ = strconv.Atoi(on[6])
 	}
 	if len(on) >= 8 {
-		y.Flowing, _ = strconv.Atoi(on[7].(string))
+		y.Flowing, _ = strconv.Atoi(on[7])
 	}
 	if len(on) >= 9 {
-		y.DelayOff, _ = strconv.Atoi(on[8].(string))
+		y.DelayOff, _ = strconv.Atoi(on[8])
 	}
 	if len(on) >= 10 {
-		y.FlowParams, _ = strconv.Atoi(on[9].(string))
+		y.FlowParams, _ = strconv.Atoi(on[9])
 	}
 	if len(on) >= 11 {
-		y.MusicOn, _ = strconv.Atoi(on[10].(string))
+		y.MusicOn, _ = strconv.Atoi(on[10])
 	}
 
 	if saveState {
@@ -817,7 +819,15 @@ func (y *Yeelight) UpdateToggle() bool {
 	}
 
 	if len(on) >= 1 {
-		y.Power = on[0].(string)
+		if on[0] == "ok" {
+			if y.Power == "on" {
+				y.Power = "off"
+			} else {
+				y.Power = "on"
+			}
+		} else {
+			y.Power = on[0]
+		}
 	}
 
 	go func() {
